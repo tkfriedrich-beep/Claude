@@ -19,6 +19,7 @@
     --accent: #4a9eff;
     --accent-hover: #6bb3ff;
     --success: #34d399;
+    --danger: #f87171;
     --radius: 14px;
   }
 
@@ -68,9 +69,9 @@
 
   .tab {
     flex: 1;
-    padding: 10px;
+    padding: 10px 6px;
     text-align: center;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     border: none;
     background: none;
@@ -110,7 +111,7 @@
     line-height: 1.6;
   }
 
-  .card ol {
+  .card ol, .card ul {
     padding-left: 20px;
   }
 
@@ -118,21 +119,15 @@
     margin-bottom: 8px;
   }
 
-  /* Bookmarklet link */
-  .bookmarklet-link {
-    display: block;
-    text-align: center;
-    padding: 14px;
-    background: var(--accent);
-    color: #fff;
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 10px;
-    text-decoration: none;
-    margin: 16px 0;
-    -webkit-tap-highlight-color: transparent;
+  .card code {
+    background: #111;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
   }
 
+  /* Bookmarklet code */
   .bookmarklet-code {
     font-size: 11px;
     background: #111;
@@ -147,7 +142,7 @@
     overflow-y: auto;
   }
 
-  /* Paste panel */
+  /* Inputs */
   .paste-area {
     width: 100%;
     min-height: 200px;
@@ -168,7 +163,8 @@
     border-color: var(--accent);
   }
 
-  .paste-area::placeholder {
+  .paste-area:empty::before {
+    content: attr(placeholder);
     color: #555;
   }
 
@@ -193,6 +189,27 @@
     border-color: var(--accent);
   }
 
+  .url-input {
+    width: 100%;
+    padding: 14px;
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    -webkit-appearance: none;
+  }
+
+  .url-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .url-input::placeholder {
+    color: #555;
+  }
+
   /* Buttons */
   .btn {
     display: block;
@@ -208,12 +225,17 @@
     transition: all 0.2s;
   }
 
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   .btn-primary {
     background: var(--accent);
     color: #fff;
   }
 
-  .btn-primary:active {
+  .btn-primary:active:not(:disabled) {
     background: var(--accent-hover);
   }
 
@@ -235,28 +257,6 @@
 
   .btn-row .btn {
     flex: 1;
-  }
-
-  /* URL panel */
-  .url-input {
-    width: 100%;
-    padding: 14px;
-    background: #111;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 15px;
-    font-family: inherit;
-    -webkit-appearance: none;
-  }
-
-  .url-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .url-input::placeholder {
-    color: #555;
   }
 
   .status {
@@ -298,6 +298,65 @@
   }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .shortcut-steps {
+    counter-reset: step;
+  }
+
+  .shortcut-steps li {
+    list-style: none;
+    position: relative;
+    padding-left: 8px;
+  }
+
+  .shortcut-steps li::before {
+    counter-increment: step;
+    content: counter(step) ".";
+    font-weight: 700;
+    color: var(--accent);
+    position: absolute;
+    left: -16px;
+  }
+
+  .step-label {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .step-value {
+    display: block;
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 6px 0 4px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    word-break: break-all;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+
+  .badge-best {
+    background: var(--success);
+    color: #000;
+  }
+
+  .badge-alt {
+    background: var(--accent);
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -309,16 +368,48 @@
   </header>
 
   <div class="tabs">
-    <button class="tab active" data-panel="paste">Paste &amp; Clean</button>
-    <button class="tab" data-panel="bookmarklet">Bookmarklet</button>
+    <button class="tab active" data-panel="url">From Link</button>
+    <button class="tab" data-panel="paste">Paste</button>
+    <button class="tab" data-panel="shortcut">Shortcut</button>
+    <button class="tab" data-panel="bookmarklet">Safari</button>
+  </div>
+
+  <!-- FROM LINK PANEL -->
+  <div id="url" class="panel active">
+    <div class="card">
+      <h2>From the Substack app <span class="badge badge-best">Best</span></h2>
+      <ol>
+        <li>Open article in the Substack app</li>
+        <li>Tap the <strong>Share</strong> button</li>
+        <li>Tap <strong>"Copy link"</strong></li>
+        <li>Come here and tap <strong>"Paste Link"</strong> below</li>
+      </ol>
+    </div>
+
+    <input type="url" class="url-input" id="urlInput" placeholder="https://example.substack.com/p/article-name">
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="pasteUrlBtn" onclick="pasteUrl()">Paste Link</button>
+      <button class="btn btn-primary" id="fetchBtn" onclick="fetchArticle()">Get Text</button>
+    </div>
+
+    <textarea class="output-area" id="urlOutputArea" placeholder="Article text will appear here..." readonly></textarea>
+    <div class="word-count" id="urlWordCount"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="urlCopyBtn" onclick="copyUrlOutput()">Copy Text</button>
+      <button class="btn btn-outline" onclick="clearUrl()">Clear</button>
+    </div>
+
+    <div class="status" id="urlStatus"></div>
   </div>
 
   <!-- PASTE & CLEAN PANEL -->
-  <div id="paste" class="panel active">
+  <div id="paste" class="panel">
     <div class="card">
-      <h2>How it works</h2>
+      <h2>Paste &amp; Clean <span class="badge badge-alt">Fallback</span></h2>
       <ol>
-        <li>Open the article in Safari</li>
+        <li>Open the article in Safari or any browser</li>
         <li>Select All (tap &amp; hold, then "Select All")</li>
         <li>Copy the content</li>
         <li>Come back here and paste into the box below</li>
@@ -344,11 +435,73 @@
     <div class="status" id="status"></div>
   </div>
 
+  <!-- IOS SHORTCUT PANEL -->
+  <div id="shortcut" class="panel">
+    <div class="card">
+      <h2>iOS Shortcut <span class="badge badge-alt">Power user</span></h2>
+      <p>Create an iOS Shortcut that extracts article text directly from the Substack share sheet — no switching apps needed.</p>
+    </div>
+
+    <div class="card">
+      <h2>Create the Shortcut</h2>
+      <p>Open the <strong>Shortcuts</strong> app and create a new shortcut with these actions in order:</p>
+
+      <ol class="shortcut-steps">
+        <li>
+          <span class="step-label">Receive input from Share Sheet</span>
+          <span class="step-value">Accept: URLs</span>
+          <span style="color:var(--text-dim);font-size:13px;">If there is no input: <strong>Ask For</strong> → URL</span>
+        </li>
+        <li>
+          <span class="step-label">Get Contents of URL</span>
+          <span class="step-value">URL: Shortcut Input</span>
+        </li>
+        <li>
+          <span class="step-label">Make Rich Text from HTML</span>
+          <span class="step-value">Input: Contents of URL</span>
+        </li>
+        <li>
+          <span class="step-label">Get Text from Input</span>
+          <span class="step-value">Input: Rich Text from HTML</span>
+          <span style="color:var(--text-dim);font-size:13px;">This strips all images and formatting</span>
+        </li>
+        <li>
+          <span class="step-label">Copy to Clipboard</span>
+          <span class="step-value">Input: Text</span>
+        </li>
+        <li>
+          <span class="step-label">Show Notification</span>
+          <span class="step-value">Title: "Article Copied!"</span>
+        </li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Setup</h2>
+      <ol>
+        <li>Name the shortcut <strong>"Get Article Text"</strong></li>
+        <li>Tap the <strong>ⓘ</strong> at the top → enable <strong>"Show in Share Sheet"</strong></li>
+        <li>Under Share Sheet Types, select only <strong>URLs</strong></li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Usage</h2>
+      <ol>
+        <li>Open any article in the <strong>Substack app</strong></li>
+        <li>Tap the <strong>Share</strong> button</li>
+        <li>Tap <strong>"Get Article Text"</strong> in the share sheet</li>
+        <li>You'll get a notification — the text is on your clipboard!</li>
+      </ol>
+      <p class="note">Works with Substack, Medium, WordPress, and any web article.</p>
+    </div>
+  </div>
+
   <!-- BOOKMARKLET PANEL -->
   <div id="bookmarklet" class="panel">
     <div class="card">
-      <h2>One-tap extraction</h2>
-      <p>Add a bookmarklet to Safari for one-tap article text extraction while reading.</p>
+      <h2>Safari Bookmarklet <span class="badge badge-alt">Safari only</span></h2>
+      <p>One-tap text extraction while browsing in Safari. Does not work in the Substack app — use the <strong>From Link</strong> or <strong>Shortcut</strong> tab instead.</p>
     </div>
 
     <div class="card">
@@ -370,133 +523,213 @@
     <div class="card">
       <h2>Usage</h2>
       <ol>
-        <li>Open any article (Substack, Medium, etc.)</li>
-        <li>Tap the address bar and start typing <strong>"Get Text"</strong></li>
+        <li>Open any article in <strong>Safari</strong></li>
+        <li>Tap the address bar and type <strong>"Get Text"</strong></li>
         <li>Select the bookmarklet</li>
-        <li>Article text is copied to your clipboard!</li>
+        <li>Article text is copied to your clipboard</li>
       </ol>
-      <p class="note">A banner will confirm when text is copied.</p>
+      <p class="note">A green banner confirms when text is copied.</p>
     </div>
   </div>
 </div>
 
 <script>
-// Bookmarklet source (readable)
-const bookmarkletSource = `
-(function(){
-  try {
-    var selectors = [
-      '.post-content',
-      'article .body',
-      'article .post-content-final',
-      '.entry-content',
-      '.article-content',
-      '.post-body',
-      'article[role="article"]',
-      'article',
-      '[role="main"]',
-      'main',
-      '.content'
-    ];
-    var el = null;
-    for (var i = 0; i < selectors.length; i++) {
-      el = document.querySelector(selectors[i]);
-      if (el) break;
-    }
-    if (!el) el = document.body;
+// ── CORS Proxies (tried in order) ──
+const CORS_PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
+];
 
-    var clone = el.cloneNode(true);
+// ── Article extraction from HTML string ──
+function extractFromHTML(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
 
-    var remove = clone.querySelectorAll(
-      'img, picture, figure, video, svg, iframe, ' +
-      'script, style, noscript, nav, footer, header, ' +
-      '.subscription-widget, .subscribe-widget, ' +
-      '.post-footer, .share-dialog, .comments, ' +
-      '.social-share, .related-posts, .sidebar'
-    );
-    for (var j = 0; j < remove.length; j++) {
-      remove[j].remove();
-    }
+  // Try to find the article content container
+  const selectors = [
+    '.post-content',
+    '.available-content',
+    'article .body',
+    'article .post-content-final',
+    '.entry-content',
+    '.article-content',
+    '.post-body',
+    'article[role="article"]',
+    'article',
+    '[role="main"]',
+    'main',
+    '.content'
+  ];
 
-    var text = '';
-    var blocks = clone.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th,figcaption,dt,dd');
-    if (blocks.length > 0) {
-      var lines = [];
-      for (var k = 0; k < blocks.length; k++) {
-        var t = blocks[k].innerText.trim();
-        if (t) {
-          var tag = blocks[k].tagName;
-          if (tag.match(/^H[1-6]$/)) t = '\\n' + t + '\\n';
-          lines.push(t);
-        }
-      }
-      text = lines.join('\\n\\n');
-    } else {
-      text = clone.innerText;
-    }
-
-    text = text.replace(/\\n{3,}/g, '\\n\\n').trim();
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function(){
-        showBanner(text.split(/\\s+/).length + ' words copied!');
-      }).catch(function(){
-        fallbackCopy(text);
-      });
-    } else {
-      fallbackCopy(text);
-    }
-
-    function fallbackCopy(t) {
-      var ta = document.createElement('textarea');
-      ta.value = t;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      showBanner(t.split(/\\s+/).length + ' words copied!');
-    }
-
-    function showBanner(msg) {
-      var b = document.createElement('div');
-      b.textContent = msg;
-      b.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:16px;background:#34d399;color:#000;text-align:center;font:bold 16px -apple-system,sans-serif;z-index:999999;transition:opacity 0.5s';
-      document.body.appendChild(b);
-      setTimeout(function(){ b.style.opacity='0'; }, 2000);
-      setTimeout(function(){ b.remove(); }, 2500);
-    }
-  } catch(e) {
-    alert('Error: ' + e.message);
+  let root = null;
+  for (const sel of selectors) {
+    root = doc.querySelector(sel);
+    if (root) break;
   }
-})();
-`;
+  if (!root) root = doc.body;
 
-// Minified bookmarklet for the URL
-const bookmarkletCode = 'javascript:' + bookmarkletSource
-  .replace(/\s*\/\/[^\n]*/g, '')
-  .replace(/\n\s*/g, ' ')
-  .replace(/\s{2,}/g, ' ')
-  .trim();
+  // Remove images, media, and non-content elements
+  root.querySelectorAll(
+    'img, picture, figure, video, svg, iframe, canvas, audio, ' +
+    'script, style, noscript, nav, footer, ' +
+    '.subscription-widget, .subscribe-widget, .paywall, ' +
+    '.post-footer, .share-dialog, .comments, ' +
+    '.social-share, .related-posts, .sidebar, ' +
+    '.header-anchor-widget, .captioned-button-wrap, ' +
+    'button, [role="button"]'
+  ).forEach(el => el.remove());
 
-document.getElementById('bmCode').textContent = bookmarkletCode;
+  // Get block elements for structured text
+  const blocks = root.querySelectorAll(
+    'h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th,figcaption,dt,dd'
+  );
 
-// Tab switching
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.panel).classList.add('active');
-  });
-});
+  let text = '';
+  if (blocks.length > 0) {
+    const lines = [];
+    for (const block of blocks) {
+      const t = (block.innerText || block.textContent || '').trim();
+      if (!t) continue;
+      const tag = block.tagName;
+      if (tag.match(/^H[1-6]$/)) {
+        lines.push('\n' + t + '\n');
+      } else {
+        lines.push(t);
+      }
+    }
+    text = lines.join('\n\n');
+  } else {
+    text = root.innerText || root.textContent || '';
+  }
 
-// Extract text from pasted content
+  // Clean up
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  // Deduplicate consecutive identical lines
+  const deduped = [];
+  let prev = '';
+  for (const line of text.split('\n')) {
+    if (line.trim() !== prev.trim() || line.trim() === '') {
+      deduped.push(line);
+    }
+    prev = line;
+  }
+
+  return deduped.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── URL Panel: Paste link from clipboard ──
+async function pasteUrl() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && (text.startsWith('http://') || text.startsWith('https://'))) {
+      document.getElementById('urlInput').value = text.trim();
+      fetchArticle();
+    } else if (text) {
+      document.getElementById('urlInput').value = text.trim();
+      showUrlStatus('Pasted — tap "Get Text" to fetch', true);
+    } else {
+      showUrlStatus('Clipboard is empty', false);
+    }
+  } catch (e) {
+    // Clipboard API denied — fall back to focus
+    document.getElementById('urlInput').focus();
+    showUrlStatus('Tap the field and paste manually', false);
+  }
+}
+
+// ── URL Panel: Fetch article via CORS proxy ──
+async function fetchArticle() {
+  const input = document.getElementById('urlInput');
+  const output = document.getElementById('urlOutputArea');
+  const fetchBtn = document.getElementById('fetchBtn');
+  let url = input.value.trim();
+
+  if (!url) {
+    showUrlStatus('Enter an article URL first', false);
+    return;
+  }
+
+  // Add https if missing
+  if (!url.startsWith('http')) url = 'https://' + url;
+  input.value = url;
+
+  fetchBtn.disabled = true;
+  fetchBtn.innerHTML = '<span class="spinner"></span>Fetching...';
+  output.value = '';
+  document.getElementById('urlWordCount').textContent = '';
+
+  let html = null;
+  let lastError = '';
+
+  for (const makeUrl of CORS_PROXIES) {
+    try {
+      const proxyUrl = makeUrl(url);
+      const resp = await fetch(proxyUrl, {
+        headers: { 'Accept': 'text/html' }
+      });
+      if (resp.ok) {
+        html = await resp.text();
+        break;
+      }
+      lastError = 'HTTP ' + resp.status;
+    } catch (e) {
+      lastError = e.message;
+    }
+  }
+
+  fetchBtn.disabled = false;
+  fetchBtn.textContent = 'Get Text';
+
+  if (!html) {
+    showUrlStatus('Could not fetch article. Try the Paste or Shortcut tab.', false);
+    output.value = 'Fetch failed: ' + lastError + '\n\nTip: Copy the link, open it in Safari, then use the Paste tab or Safari bookmarklet.';
+    return;
+  }
+
+  const text = extractFromHTML(html);
+
+  if (!text || text.length < 50) {
+    showUrlStatus('Could not extract text — article may be paywalled', false);
+    output.value = text || '(no text found)';
+    return;
+  }
+
+  output.value = text;
+  const wordCount = text.split(/\s+/).filter(w => w).length;
+  document.getElementById('urlWordCount').textContent = wordCount.toLocaleString() + ' words';
+  showUrlStatus('Article extracted!', true);
+}
+
+function copyUrlOutput() {
+  const output = document.getElementById('urlOutputArea');
+  if (!output.value) {
+    showUrlStatus('Nothing to copy', false);
+    return;
+  }
+  clipboardWrite(output.value, 'urlCopyBtn', 'urlStatus');
+}
+
+function clearUrl() {
+  document.getElementById('urlInput').value = '';
+  document.getElementById('urlOutputArea').value = '';
+  document.getElementById('urlWordCount').textContent = '';
+  document.getElementById('urlStatus').classList.remove('visible');
+}
+
+function showUrlStatus(msg, success) {
+  const s = document.getElementById('urlStatus');
+  s.textContent = msg;
+  s.style.color = success ? 'var(--success)' : 'var(--danger)';
+  s.classList.add('visible');
+  setTimeout(() => s.classList.remove('visible'), 3000);
+}
+
+// ── Paste Panel ──
 function extractText() {
   const input = document.getElementById('pasteInput');
   const output = document.getElementById('outputArea');
-
-  // Work with the rich HTML pasted into contenteditable
   const html = input.innerHTML;
 
   if (!html || html === '<br>' || !input.innerText.trim()) {
@@ -504,93 +737,18 @@ function extractText() {
     return;
   }
 
-  // Parse the HTML and strip images/media
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-
-  // Remove images, figures, videos, svgs, and other media
-  doc.querySelectorAll(
-    'img, picture, figure, video, svg, iframe, canvas, audio, ' +
-    'script, style, noscript'
-  ).forEach(el => el.remove());
-
-  // Get block elements for structured text
-  const blocks = doc.querySelectorAll(
-    'h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th,div,br'
-  );
-
-  let text = '';
-  if (blocks.length > 3) {
-    const lines = [];
-    blocks.forEach(block => {
-      const t = block.innerText ? block.innerText.trim() : block.textContent.trim();
-      if (t) {
-        const tag = block.tagName;
-        if (tag.match(/^H[1-6]$/)) {
-          lines.push('\n' + t + '\n');
-        } else {
-          lines.push(t);
-        }
-      }
-    });
-    text = lines.join('\n\n');
-  } else {
-    // Fallback: get plain text
-    text = doc.body.innerText || doc.body.textContent || '';
-  }
-
-  // Clean up excessive newlines
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
-
-  // Remove duplicate consecutive lines
-  const dedupedLines = [];
-  let prev = '';
-  text.split('\n').forEach(line => {
-    if (line.trim() !== prev.trim() || line.trim() === '') {
-      dedupedLines.push(line);
-    }
-    prev = line;
-  });
-  text = dedupedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-
+  const text = extractFromHTML(html);
   output.value = text;
 
   const wordCount = text.split(/\s+/).filter(w => w).length;
   document.getElementById('wordCount').textContent = wordCount.toLocaleString() + ' words';
-
   showStatus('Text extracted!', true);
 }
 
-// Copy extracted text
 function copyOutput() {
   const output = document.getElementById('outputArea');
-  if (!output.value) {
-    showStatus('Nothing to copy', false);
-    return;
-  }
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(output.value).then(() => {
-      showStatus('Copied to clipboard!', true);
-      document.getElementById('copyBtn').textContent = 'Copied!';
-      document.getElementById('copyBtn').classList.add('btn-success');
-      setTimeout(() => {
-        document.getElementById('copyBtn').textContent = 'Copy Text';
-        document.getElementById('copyBtn').classList.remove('btn-success');
-      }, 2000);
-    }).catch(() => {
-      fallbackCopy(output);
-    });
-  } else {
-    fallbackCopy(output);
-  }
-}
-
-function fallbackCopy(textarea) {
-  textarea.select();
-  textarea.setSelectionRange(0, textarea.value.length);
-  document.execCommand('copy');
-  showStatus('Copied to clipboard!', true);
+  if (!output.value) { showStatus('Nothing to copy', false); return; }
+  clipboardWrite(output.value, 'copyBtn', 'status');
 }
 
 function selectAllOutput() {
@@ -608,20 +766,132 @@ function clearAll() {
 }
 
 function showStatus(msg, success) {
-  const status = document.getElementById('status');
-  status.textContent = msg;
-  status.style.color = success ? 'var(--success)' : '#f87171';
-  status.classList.add('visible');
-  setTimeout(() => status.classList.remove('visible'), 2500);
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.style.color = success ? 'var(--success)' : 'var(--danger)';
+  s.classList.add('visible');
+  setTimeout(() => s.classList.remove('visible'), 2500);
 }
 
-// Copy bookmarklet code
+// ── Shared clipboard helper ──
+function clipboardWrite(text, btnId, statusId) {
+  const btn = document.getElementById(btnId);
+  const write = () => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('btn-success');
+    const s = document.getElementById(statusId);
+    s.textContent = 'Copied to clipboard!';
+    s.style.color = 'var(--success)';
+    s.classList.add('visible');
+    setTimeout(() => {
+      btn.textContent = 'Copy Text';
+      btn.classList.remove('btn-success');
+      s.classList.remove('visible');
+    }, 2000);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(write).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      write();
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    write();
+  }
+}
+
+// ── Bookmarklet ──
+const bookmarkletSource = `
+(function(){
+  try {
+    var selectors = [
+      '.post-content','.available-content','article .body',
+      'article .post-content-final','.entry-content','.article-content',
+      '.post-body','article[role="article"]','article','[role="main"]',
+      'main','.content'
+    ];
+    var el = null;
+    for (var i = 0; i < selectors.length; i++) {
+      el = document.querySelector(selectors[i]);
+      if (el) break;
+    }
+    if (!el) el = document.body;
+    var clone = el.cloneNode(true);
+    var remove = clone.querySelectorAll(
+      'img,picture,figure,video,svg,iframe,script,style,noscript,nav,footer,header,' +
+      '.subscription-widget,.subscribe-widget,.post-footer,.share-dialog,.comments,' +
+      '.social-share,.related-posts,.sidebar,button,[role="button"]'
+    );
+    for (var j = 0; j < remove.length; j++) remove[j].remove();
+    var text = '';
+    var blocks = clone.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th,figcaption,dt,dd');
+    if (blocks.length > 0) {
+      var lines = [];
+      for (var k = 0; k < blocks.length; k++) {
+        var t = blocks[k].innerText.trim();
+        if (t) {
+          if (blocks[k].tagName.match(/^H[1-6]$/)) t = '\\n' + t + '\\n';
+          lines.push(t);
+        }
+      }
+      text = lines.join('\\n\\n');
+    } else {
+      text = clone.innerText;
+    }
+    text = text.replace(/\\n{3,}/g, '\\n\\n').trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){
+        showBanner(text.split(/\\s+/).length + ' words copied!');
+      }).catch(function(){ fallbackCopy(text); });
+    } else { fallbackCopy(text); }
+    function fallbackCopy(t) {
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showBanner(t.split(/\\s+/).length + ' words copied!');
+    }
+    function showBanner(msg) {
+      var b = document.createElement('div');
+      b.textContent = msg;
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:16px;background:#34d399;color:#000;text-align:center;font:bold 16px -apple-system,sans-serif;z-index:999999;transition:opacity 0.5s';
+      document.body.appendChild(b);
+      setTimeout(function(){ b.style.opacity='0'; }, 2000);
+      setTimeout(function(){ b.remove(); }, 2500);
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+})();
+`;
+
+const bookmarkletCode = 'javascript:' + bookmarkletSource
+  .replace(/\s*\/\/[^\n]*/g, '')
+  .replace(/\n\s*/g, ' ')
+  .replace(/\s{2,}/g, ' ')
+  .trim();
+
+document.getElementById('bmCode').textContent = bookmarkletCode;
+
 function copyBookmarklet() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(bookmarkletCode).then(() => {
-      showBMStatus('Code copied! Now create a bookmark and paste as the URL.');
+      showBMStatus('Code copied! Create a bookmark and paste as the URL.');
     }).catch(() => {
-      // Fallback
       const ta = document.createElement('textarea');
       ta.value = bookmarkletCode;
       document.body.appendChild(ta);
@@ -641,15 +911,43 @@ function showBMStatus(msg) {
   setTimeout(() => s.classList.remove('visible'), 4000);
 }
 
-// Handle paste event on contenteditable to accept rich content
+// ── Tab switching ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+  });
+});
+
+// ── Handle paste event on contenteditable ──
 document.getElementById('pasteInput').addEventListener('paste', function(e) {
   // Allow default paste to preserve HTML for extraction
 });
 
-// Prevent default behavior issues on iOS
+// ── Handle shared URLs via Web Share Target API (PWA) or query params ──
+(function handleSharedUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const sharedUrl = params.get('url') || params.get('text') || '';
+  if (sharedUrl && sharedUrl.startsWith('http')) {
+    document.getElementById('urlInput').value = sharedUrl;
+    // Auto-switch to URL tab and fetch
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-panel="url"]').classList.add('active');
+    document.getElementById('url').classList.add('active');
+    // Slight delay to let the page render
+    setTimeout(() => fetchArticle(), 300);
+    // Clean the URL
+    history.replaceState(null, '', window.location.pathname);
+  }
+})();
+
+// ── iOS touch fix ──
 document.addEventListener('touchstart', function(){}, {passive: true});
 
-// Register service worker for offline/PWA support
+// ── Service worker ──
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
