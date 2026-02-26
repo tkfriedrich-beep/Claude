@@ -1,0 +1,18 @@
+{
+  "name": "Article Text Copier",
+  "short_name": "TextCopy",
+  "description": "Copy article text without photos from Substack and other platforms",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f0f",
+  "theme_color": "#0f0f0f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%23111'/><text x='256' y='350' font-size='280' text-anchor='middle' fill='%23fff' font-family='-apple-system,sans-serif' font-weight='bold'>T</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
