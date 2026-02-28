@@ -1,0 +1,17 @@
+{
+  "name": "iran-news-timeline",
+  "version": "1.0.0",
+  "description": "Live news timeline aggregating Iran-related updates from major news wires",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "rss-parser": "^3.13.0"
+  }
+}
