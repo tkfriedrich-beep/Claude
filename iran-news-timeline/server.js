@@ -211,7 +211,7 @@ app.get("/api/news", async (req, res) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 // Fallback to index.html
-app.get("*", (req, res) => {
+app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
