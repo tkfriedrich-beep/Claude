@@ -1,0 +1,31 @@
+{
+  "$schema": "https://claude.ai/code/settings-schema.json",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Agent",
+      "WebSearch",
+      "WebFetch"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "description": "Log significant state changes to daily log",
+        "matcher": "Edit|Write",
+        "command": "echo \"$(date +%H:%M) — File modified: $CLAUDE_FILE_PATH\" >> state/daily-logs/$(date +%Y-%m-%d).md 2>/dev/null || true"
+      }
+    ]
+  },
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
