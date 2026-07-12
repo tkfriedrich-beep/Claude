@@ -19,7 +19,7 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · ❌ blocked
 
 | Gate | Result |
 | --- | --- |
-| `pytest` (control plane) | **87 passed** at MVP; **121 passed** after review rounds 1–2 (see below) |
+| `pytest` (control plane) | **87 passed** at MVP; **140 passed** after review rounds 1–2 + Web Research (see below) |
 | `ruff check` + `ruff format --check` | clean |
 | `mypy src` | no issues in 52 files |
 | `pnpm typecheck` (web) | clean |
@@ -130,10 +130,43 @@ verified up→base→up. Playwright e2e not re-run this round: the changes are c
 with no API-contract or event-shape change, and the full worker/skill/chat pipeline is covered by
 the 121 backend tests (M5's 10/10 e2e remains the last browser result).
 
+## Post-MVP: Web Research connector + source-backed Research Run (2026-07-12)
+
+Turned the previously knowledge-only Research Run into a live, source-backed skill (DECISIONS
+ADR-016). New shipped `web` connector with two R1 read tools reached only through the Tool
+Gateway (invariant 2):
+
+- **`web.search`** — Firecrawl-backed when `FIRECRAWL_API_KEY` is set (secret referenced by env
+  name via SecretStore, never stored), with a clearly `demo`-labeled offline fallback so the
+  skill runs credential-less.
+- **`web.fetch`** — keyless direct fetch with an **SSRF guard** (only http(s); host must resolve
+  entirely to public IPs; loopback/private/link-local/**metadata `169.254.169.254`**/reserved
+  refused; redirects followed manually with per-hop re-validation; non-text/oversized rejected).
+  Retrieved content is untrusted **data** — the skill tells the model to ignore instructions
+  embedded in fetched pages.
+
+Research Run degrades along a clear ladder: live sources + provider → cited LLM memo
+(`source_backed`); live sources, no provider → deterministic extractive digest (still
+`source_backed`); no live sources + provider → knowledge-based memo (labeled); neither → clean
+failure. Manifest now declares `required_connectors: [web]` + `allowed_tools: [web.search,
+web.fetch]` (tightening).
+
+Verified live in-container: `web.fetch` against real pages (pypi.org → title + extracted text
+through the agent proxy); SSRF guard blocks the metadata IP live; offline search returns
+demo-labeled results. (Arbitrary public hosts like example.com are 403'd by the environment's
+network policy — the connector surfaces that as a clean error.)
+
+Test gate (all actually executed 2026-07-12): **pytest 140 passed** (+19 in
+`tests/test_web_research.py`: SSRF guard matrix, direct fetch/extraction, redirect re-validation,
+binary rejection, offline + Firecrawl-mocked search, and full-pipeline source-backed/knowledge
+Research Run) · `ruff check` + `ruff format --check` clean · `mypy src` no issues in 53 files.
+Residual: DNS rebinding (THREAT_MODEL / connectors/web/README.md).
+
 ## Known limitations (honest)
 
 - Claude chat exposes read-only tools only (ADR-011); writes go through skills + approvals.
-- Research Run is knowledge-based (no web connector yet) and says so in every memo.
+- Research Run is source-backed via the `web` connector (ADR-016); live search needs
+  `FIRECRAWL_API_KEY`, else it labels the memo knowledge-based. `web.fetch` works keyless.
 - Idea scoring is keyword-heuristic — labeled as such in scorecards/SKILL.md.
 - MCP stdio path implemented but exercised via the in-proc demo server in tests; real stdio
   servers depend on the user's local commands.

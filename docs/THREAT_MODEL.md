@@ -41,6 +41,10 @@ Scope: single-user, local-first MVP. Assets: the user's files (vault, bizideas),
   backup = file copy; protect the disk with FileVault or equivalent.
 - Microphone/voice: not implemented; the design reserves push-to-talk only. Never
   always-listening.
+- Web fetch (`web.fetch`) SSRF guard resolves the host and refuses private/loopback/link-local/
+  reserved/metadata addresses, and re-validates every redirect hop — but DNS **rebinding** between
+  that resolution and httpx's own connect is not closed in the MVP (would need pinning the
+  connection to the validated IP). Fetched content is always treated as untrusted data.
 
 ## Security invariants (tested)
 

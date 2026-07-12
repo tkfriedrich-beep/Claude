@@ -26,6 +26,7 @@ from cockpit.connectors.mocks import (
 )
 from cockpit.connectors.n8n import N8nConnector
 from cockpit.connectors.obsidian import ObsidianConnector
+from cockpit.connectors.web import WebResearchConnector
 from cockpit.enums import ConnectorHealthState
 from cockpit.ids import new_id
 from cockpit.logging import get_logger
@@ -39,6 +40,7 @@ CONNECTOR_CLASSES: list[type[BaseConnector]] = [
     ObsidianConnector,
     N8nConnector,
     MCPConnector,
+    WebResearchConnector,
     GoogleWorkspaceMockConnector,
     NotionMockConnector,
     GitHubMockConnector,

@@ -55,7 +55,7 @@ async def test_briefing_and_settings(client: httpx.AsyncClient) -> None:
     briefing = (await client.get("/api/v1/briefing")).json()
     assert briefing["assistant_name"] == "Otto"
     assert briefing["safe_mode"] is True
-    assert briefing["metrics"]["connectors_total"] == 7
+    assert briefing["metrics"]["connectors_total"] == 8  # +web (Web Research)
     assert isinstance(briefing["what_matters"], list) and briefing["what_matters"]
 
     patch = await client.patch("/api/v1/settings", json={"safe_mode": False})

@@ -95,6 +95,25 @@ registration the control plane discovers tools, converts their JSON Schemas into
 tighten/loosen per tool via policies), and namespaces ids `mcp.<server>.<tool>`. MCP output is
 untrusted data: schema-validated, redacted, never interpreted as instructions.
 
+## Web Research connector
+
+Shipped connector `web` with two read tools consumed by the Research Run skill:
+
+- `web.search {query, limit}` → `{results:[{title,url,snippet}], provider, demo}`. Firecrawl-backed
+  when `FIRECRAWL_API_KEY` is set (referenced by env name via SecretStore, never stored); otherwise
+  a clearly `demo:true` placeholder so the skill runs credential-less.
+- `web.fetch {url, max_chars}` → `{url,title,content,truncated,provider}`. Keyless direct fetch,
+  **SSRF-guarded**: only `http(s)`; the host must resolve entirely to public addresses
+  (loopback/private/link-local/reserved/metadata IPs refused); redirects are followed manually so
+  every hop is re-validated; non-text content and oversized bodies are rejected.
+
+Both are R1 reads (`external_side_effects=false`, `trusted=true`) — they auto-run within an active
+run, are not blocked by Safe Mode (a read, not an external change), and fetched page content is
+untrusted **data**: the skill frames it as reference material and instructs the model to ignore any
+instructions embedded in it. Per-workspace config (`api_key_env`, `search_provider`, `max_bytes`)
+flows through `ExecutionContext.config`. Known residual: DNS rebinding between the guard's
+resolution and httpx's connect is out of scope for the MVP (documented in THREAT_MODEL).
+
 ## Provider contract
 
 `AgentRuntime` (see ARCHITECTURE.md) with `provider_sessions` persistence. Claude adapter uses

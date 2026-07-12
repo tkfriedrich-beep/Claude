@@ -1,16 +1,16 @@
 id: research-run
 name: Research Run
-description: A source-honest research memo separating facts, inferences, and unknowns. Needs a healthy model provider; states its evidence limits (no web browsing connector in the MVP).
-version: 0.1.0
+description: A source-backed research memo separating facts, inferences, and unknowns. Searches the web and cites the pages it fetched; degrades to a knowledge-based memo (clearly labeled) when no live search provider is configured.
+version: 0.2.0
 domains: [knowledge, work, ventures]
 risk_level: R1
 default_autonomy: 3
-required_connectors: []
-allowed_tools: []
+required_connectors: [web]
+allowed_tools: [web.search, web.fetch]
 supports_schedule: false
 supports_dry_run: true
 timeout_seconds: 240
-max_steps: 5
+max_steps: 8
 verification_rules:
   - artifact_exists:markdown
 input_schema:
@@ -23,4 +23,5 @@ output_schema:
   properties:
     question: { type: string }
     mode: { type: string }
+    source_count: { type: integer }
   required: [question, mode]

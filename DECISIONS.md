@@ -227,3 +227,35 @@ are explicitly flagged **[deviation]**.
   persistence is idempotent across crash-resume. Two items (F8 manifest resolution, F11
   multi-process) are dormant in the single-user/single-process MVP and fixed proportionately, with
   the residual bound written down rather than hidden.
+
+## ADR-016 — Web Research connector; Research Run becomes source-backed **[capability]**
+
+- **Context:** Research Run was knowledge-only and said so — a documented limitation. The roadmap's
+  "Near" bucket calls for a Firecrawl-backed Research Run. Adding live web access means a new
+  outbound-network surface, which must not violate the connector/gateway boundary or open an SSRF
+  hole.
+- **Decisions:**
+  - **A shipped `web` connector, not direct calls from the skill.** Per architecture invariant 2,
+    the skill reaches the web only through typed tools (`web.search`, `web.fetch`) on a manifested
+    connector, governed by the gateway. Both are R1 reads, `external_side_effects=false`,
+    `trusted=true` — they auto-run within a run and are not blocked by Safe Mode (a read that sends
+    a query out is not an external *change*). A policy `confirm` rule can gate them if desired.
+  - **Search has a provider + an honest offline fallback.** Firecrawl when `FIRECRAWL_API_KEY` is
+    set (referenced by env name via SecretStore, never stored); otherwise a `demo:true` placeholder,
+    mirroring MockAgentRuntime so the feature runs credential-less. Fetch is always the keyless
+    direct path.
+  - **`web.fetch` is SSRF-guarded.** Only `http(s)`; the host must resolve entirely to public
+    addresses (loopback/private/link-local/reserved/metadata/multicast/unspecified refused);
+    redirects are followed manually with **per-hop** re-validation; non-text/oversized responses are
+    rejected. Retrieved content is untrusted **data** — the skill instructs the model to ignore
+    instructions embedded in fetched pages (retrieval-injection defense).
+  - **Research Run degrades along a clear ladder:** live sources + provider → cited LLM memo
+    (`source_backed`); live sources, no provider → deterministic extractive digest (still
+    `source_backed`); no live sources + provider → knowledge-based memo (labeled); neither → clean
+    failure with setup guidance. The skill manifest now declares `required_connectors: [web]` and
+    `allowed_tools: [web.search, web.fetch]` (tightening — it can call nothing else).
+- **Consequences:** Research Run produces genuinely source-backed, cited memos when a key is
+  configured, and still runs offline. No new third-party SDK enters `apps/web`; the outbound surface
+  is one governed connector with an SSRF boundary. Residual (documented in THREAT_MODEL /
+  connector README): DNS rebinding between the guard's resolution and httpx's connect is not closed
+  in the MVP (would require pinning the connection to the validated IP).
