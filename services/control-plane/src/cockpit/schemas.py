@@ -220,6 +220,7 @@ class ConnectorToolOut(BaseModel):
     access: str
     risk_level: str
     external_side_effects: bool
+    trusted: bool
     enabled: bool
 
     model_config = {"from_attributes": True}

@@ -201,6 +201,8 @@ class ConnectorTool(Base, TimestampMixin):
     access: Mapped[str] = mapped_column(String(20), default="read")
     risk_level: Mapped[str] = mapped_column(String(4), default="R0")
     external_side_effects: Mapped[bool] = mapped_column(Boolean, default=False)
+    # False for runtime-registered tools (n8n/MCP) — always require approval, never auto-run.
+    trusted: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     manifest: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 

@@ -145,3 +145,30 @@ are explicitly flagged **[deviation]**.
 - **Consequences:** The headline "no duplicate external actions" promise now holds across a
   mid-write crash; the filesystem boundary holds against symlink escape; the worker cannot be
   starved or spun into duplicate execution. Regression tests cover each finding.
+
+## ADR-014 — Dry-run as a distinct capability; runtime-registered tools are untrusted **[hardening]**
+
+- **Context:** The review's design concerns: (a) a dry-run was a boolean on the same executor,
+  so a buggy/hostile connector could ignore it and perform the real effect during a "preview";
+  (b) the policy trusted manifest fields (`external_side_effects`, `read_only`) from
+  *runtime-registered* connectors (n8n webhooks, discovered MCP tools) to be truthful, so a
+  webhook registered "read only" could auto-run with no approval.
+- **Decisions:**
+  - **Dry-run is a separate `BaseConnector.preview()` method** that defaults to raising
+    `PreviewNotSupported`. The gateway routes a dry-run to `preview()`, never to
+    `execute(dry_run=True)`. A connector that hasn't deliberately implemented a preview
+    therefore **fails closed** on a dry-run instead of executing. `execute()` asserts
+    `not ctx.dry_run`. The registry warns at load if a tool declares `supports_dry_run`
+    without a `preview()` override.
+  - **Runtime-registered tools are `trusted=False`.** n8n webhooks and discovered MCP tools
+    are always classified `external_side_effects=True`, `approval="required"`, `trusted=False`
+    — the user's `read_only` hint only lowers the *risk label*, never grants auto-execution.
+    The built-in in-process demo MCP server is trusted. Policy gate: an untrusted tool with
+    external side effects is **never auto-run**, not even for reads — it needs approval, or an
+    explicit `allow` rule created in the policy editor (the one privileged path). Safe Mode
+    denies untrusted external calls outright. A `connector_tools.trusted` column (migration
+    `0002`) persists this and the Integrations UI shows an "approval" badge.
+- **Consequences:** Registering a connector is no longer an implicit grant of trust; a
+  mislabeled dry-run can't perform a real effect. Genuinely-safe registered tools cost one
+  approval, or a deliberate allow-rule. Alembic `env.py` now ignores FTS5 shadow tables so
+  autogenerate stops trying to drop the search index.

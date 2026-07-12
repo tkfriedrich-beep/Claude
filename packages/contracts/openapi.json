@@ -2728,6 +2728,10 @@
             "type": "boolean",
             "title": "External Side Effects"
           },
+          "trusted": {
+            "type": "boolean",
+            "title": "Trusted"
+          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled"
@@ -2740,6 +2744,7 @@
           "access",
           "risk_level",
           "external_side_effects",
+          "trusted",
           "enabled"
         ],
         "title": "ConnectorToolOut"

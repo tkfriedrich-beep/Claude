@@ -44,6 +44,10 @@ class ToolManifest(BaseModel):
     retry: RetryPolicy = Field(default_factory=RetryPolicy)
     approval: str = "auto"  # auto | required | forbidden
     undo_strategy: str = ""
+    # Tools declared in a shipped connector manifest are trusted code. Tools whose
+    # classification is supplied at runtime registration (n8n webhooks, discovered MCP
+    # tools) set this False so the policy never auto-runs them on their own say-so.
+    trusted: bool = True
 
 
 class ConnectorManifest(BaseModel):
@@ -91,6 +95,10 @@ class ConnectorError(Exception):
     """Raised by connectors for expected failures (unreachable, bad path, upstream error)."""
 
 
+class PreviewNotSupported(ConnectorError):
+    """Raised when a dry-run/preview is requested for a tool that has no preview method."""
+
+
 class BaseConnector(ABC):
     """Loads its manifest from <repo>/connectors/<slug>/manifest.yaml."""
 
@@ -119,7 +127,27 @@ class BaseConnector(ABC):
     @abstractmethod
     async def execute(
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
-    ) -> ToolResult: ...
+    ) -> ToolResult:
+        """Perform the tool's REAL effect. Never called for a dry-run (the gateway routes
+        previews to preview()). Implementations may assert `not ctx.dry_run`."""
+
+    async def preview(
+        self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        """Produce a side-effect-free preview (diff / would-do) of a tool.
+
+        Default: refuse. Dry-run is a distinct capability, not a boolean passed to the same
+        executor — so a connector that hasn't *deliberately* written a preview can never
+        accidentally perform the real effect when the gateway asks for a preview. Only
+        connectors that override this may declare `supports_dry_run: true`.
+        """
+        raise PreviewNotSupported(
+            f"Tool “{tool_id}” has no dry-run preview — it cannot run in draft/shadow mode."
+        )
+
+    def supports_preview(self) -> bool:
+        """True if this connector overrides preview() (used to validate manifests at load)."""
+        return type(self).preview is not BaseConnector.preview
 
     def normalize_result(self, raw: Any) -> dict[str, Any]:
         return raw if isinstance(raw, dict) else {"value": raw}

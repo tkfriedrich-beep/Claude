@@ -12,6 +12,7 @@ from cockpit.connectors.base import (
     ConnectorError,
     ExecutionContext,
     HealthStatus,
+    PreviewNotSupported,
     ToolResult,
     contain_path,
 )
@@ -79,6 +80,13 @@ class ObsidianConnector(BaseConnector):
             case "obsidian.write_note":
                 return self._write(vault, validated_input, ctx)
         raise ConnectorError(f"unknown tool {tool_id}")
+
+    async def preview(
+        self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        if tool_id == "obsidian.write_note":
+            return self._delegate_write(self._vault(ctx), validated_input, ctx, preview=True)
+        raise PreviewNotSupported(f"{tool_id} has no preview")
 
     def _iter_notes(self, vault: Path, section: str) -> list[Path]:
         base = vault if section in ("", "all") else vault / section
@@ -170,7 +178,14 @@ class ObsidianConnector(BaseConnector):
         )
 
     def _write(self, vault: Path, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
-        # Delegate write mechanics (diff, dry-run) to the local-files implementation.
+        return self._delegate_write(vault, inp, ctx, preview=False)
+
+    def _delegate_write(
+        self, vault: Path, inp: dict[str, Any], ctx: ExecutionContext, *, preview: bool
+    ) -> ToolResult:
+        # Delegate write mechanics (containment, diff, real vs preview) to the local-files
+        # implementation so the symlink guard and dry-run capability live in one place.
         helper = LocalFilesConnector.__new__(LocalFilesConnector)
         target = vault / inp["path"] if not Path(inp["path"]).is_absolute() else Path(inp["path"])
-        return helper._write({"path": str(target), "content": inp["content"]}, ctx)
+        payload = {"path": str(target), "content": inp["content"]}
+        return helper._preview_write(payload, ctx) if preview else helper._write(payload, ctx)

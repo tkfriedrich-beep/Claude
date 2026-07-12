@@ -44,6 +44,10 @@ class ToolSpec:
     supports_dry_run: bool
     idempotent: bool
     enabled: bool = True
+    # False for tools whose classification is supplied at *runtime registration* (n8n
+    # webhooks, discovered MCP tools). Registering a connector is not a grant of trust, so we
+    # never let such a tool's own "this is a read" claim earn auto-execution — see evaluate().
+    trusted: bool = True
 
 
 @dataclass(frozen=True)
@@ -119,8 +123,30 @@ def evaluate(tool: ToolSpec, ctx: PolicyContext) -> Decision:
     if is_write and ctx.connector_mode is ConnectorMode.READ_ONLY:
         return deny(f"Connector “{tool.connector_slug}” is set to read-only.")
 
-    # 7: reads run automatically within the active context (R0/R1)
+    # 7: reads run automatically within the active context (R0/R1) — but a tool from a
+    # user-registered connector is untrusted: we don't believe its self-declared "read"
+    # classification enough to auto-run it, because it could actually mutate an external
+    # system. It needs approval (or an explicit allow rule created in the policy editor).
     if not is_write:
+        if tool.external_side_effects and not tool.trusted:
+            for rule in ctx.rules:
+                if rule.kind is PolicyKind.ALLOW and rule.matches(tool, ctx.skill_slug):
+                    return Decision(
+                        Outcome.ALLOW,
+                        f"Allowed by your policy rule for {rule.tool_id or rule.connector_slug}.",
+                        risk,
+                        notes=("allowlist", "untrusted"),
+                    )
+            if ctx.safe_mode:
+                return deny(
+                    "Safe Mode is on — a user-registered connector's external call is blocked."
+                )
+            return Decision(
+                Outcome.REQUIRE_APPROVAL,
+                "External call from a connector you registered — approve it, or add an "
+                "allow rule in Settings → Policies to trust it.",
+                risk,
+            )
         for rule in ctx.rules:
             if rule.kind is PolicyKind.CONFIRM and rule.matches(tool, ctx.skill_slug):
                 return Decision(

@@ -72,6 +72,17 @@ class Registry:
             try:
                 connector = cls(self.settings.connectors_dir)
                 self.connectors[connector.slug] = connector
+                # A tool declaring supports_dry_run must have a real preview() — otherwise a
+                # draft-mode run would call the default preview() and fail closed. Warn early.
+                if not connector.supports_preview():
+                    liars = [t.id for t in connector.get_manifest().tools if t.supports_dry_run]
+                    if liars:
+                        log.error(
+                            "connector %s declares supports_dry_run for %s but has no "
+                            "preview() — those tools cannot dry-run",
+                            connector.slug,
+                            liars,
+                        )
             except Exception:
                 log.exception("failed to load connector %s", cls.slug)
 
@@ -176,6 +187,7 @@ class Registry:
             row.access = tool.access.value
             row.risk_level = tool.risk_level.value
             row.external_side_effects = tool.external_side_effects
+            row.trusted = tool.trusted
             row.manifest = tool.model_dump(mode="json")
         for tool_id, row in existing.items():
             if tool_id not in current_ids:

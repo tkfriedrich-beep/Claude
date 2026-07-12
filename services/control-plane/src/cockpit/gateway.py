@@ -249,6 +249,7 @@ class ToolGateway:
             external_side_effects=tool.external_side_effects,
             supports_dry_run=tool.supports_dry_run,
             idempotent=tool.idempotent,
+            trusted=tool.trusted,
         )
         decision = evaluate(spec, ctx)
         # Manifest-level "approval: required" tightens (never loosens) the policy result.
@@ -448,8 +449,12 @@ class ToolGateway:
             config=getattr(connector, "runtime_config", {}) or {},
             settings=self.settings,
         )
+        # A dry-run goes to the connector's dedicated preview() method, never to execute()
+        # with a flag — so a connector that lacks a real preview fails closed (raises
+        # PreviewNotSupported) instead of silently performing the effect.
+        target = connector.preview if dry_run else connector.execute
         return await asyncio.wait_for(
-            connector.execute(tool.id, tool_input, exec_ctx), timeout=tool.timeout_seconds
+            target(tool.id, tool_input, exec_ctx), timeout=tool.timeout_seconds
         )
 
     async def _execute(

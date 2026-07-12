@@ -82,6 +82,24 @@ Note the reviewer worked static-only (no network to clone/run), so its stated me
 crash, which is why the durable pre-dispatch commit is the fix. F4 was confirmed real but not
 reachable in the shipped system (no chat-exposed approval-gated tool); fixed proactively.
 
+## Post-MVP: hardening round 2 — design concerns (2026-07-12)
+
+Acted on the two design concerns from the review (DECISIONS ADR-014):
+
+- **Dry-run is now a distinct capability.** `BaseConnector.preview()` defaults to raising
+  `PreviewNotSupported`; the gateway routes previews to `preview()`, never `execute(dry_run)`.
+  A connector without a real preview fails closed instead of performing the effect. Registry
+  warns at load if `supports_dry_run` is declared without a `preview()`.
+- **Runtime-registered tools are untrusted.** n8n/MCP tools → `trusted=False`, always
+  external + approval-required; a `read_only` hint only lowers the risk label, never grants
+  auto-run. Policy never auto-runs an untrusted external tool (even reads); Safe Mode denies
+  them; loosening is only via an explicit allow rule. New `connector_tools.trusted` column
+  (migration `0002`, idempotent per ADR-005); Integrations UI shows an "approval" badge and a
+  registration notice. Alembic `env.py` now ignores FTS5 shadow tables.
+
+Test gate: **pytest 106 passed** (+9 in `tests/test_hardening.py`) · ruff + mypy clean ·
+tsc + eslint clean · **e2e 10/10** · migration `0002` verified up/down/up.
+
 ## Known limitations (honest)
 
 - Claude chat exposes read-only tools only (ADR-011); writes go through skills + approvals.

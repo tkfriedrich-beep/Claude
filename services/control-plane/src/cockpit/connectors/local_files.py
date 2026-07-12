@@ -14,6 +14,7 @@ from cockpit.connectors.base import (
     ConnectorError,
     ExecutionContext,
     HealthStatus,
+    PreviewNotSupported,
     ToolResult,
     contain_path,
     contain_write_target,
@@ -59,6 +60,13 @@ class LocalFilesConnector(BaseConnector):
             case "local_files.write":
                 return self._write(validated_input, ctx)
         raise ConnectorError(f"unknown tool {tool_id}")
+
+    async def preview(
+        self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        if tool_id == "local_files.write":
+            return self._preview_write(validated_input, ctx)
+        raise PreviewNotSupported(f"{tool_id} has no preview")
 
     def _list(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
         root = contain_path(inp.get("root") or str(ctx.roots[0]), ctx.roots)
@@ -137,7 +145,7 @@ class LocalFilesConnector(BaseConnector):
             summary=f"Found {len(matches)} match(es) for “{query}”",
         )
 
-    def _write(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
+    def _resolve_write(self, inp: dict[str, Any], ctx: ExecutionContext):
         # Containment must hold for the *resolved* target — including not-yet-existing files
         # and a symlinked final component that would escape the roots (review F2).
         path = contain_write_target(inp["path"], ctx.roots)
@@ -159,12 +167,19 @@ class LocalFilesConnector(BaseConnector):
             )
             or "(new file)"
         )
-        if ctx.dry_run:
-            return ToolResult(
-                ok=True,
-                data={"path": str(path), "written": False, "diff": diff, "bytes": len(new_content)},
-                summary=f"Preview: would write {len(new_content)} bytes to {path.name}",
-            )
+        return path, new_content, diff
+
+    def _preview_write(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
+        path, new_content, diff = self._resolve_write(inp, ctx)
+        return ToolResult(
+            ok=True,
+            data={"path": str(path), "written": False, "diff": diff, "bytes": len(new_content)},
+            summary=f"Preview: would write {len(new_content)} bytes to {path.name}",
+        )
+
+    def _write(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
+        assert not ctx.dry_run, "real write called for a dry-run — gateway routing bug"
+        path, new_content, diff = self._resolve_write(inp, ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_content, encoding="utf-8")
         return ToolResult(

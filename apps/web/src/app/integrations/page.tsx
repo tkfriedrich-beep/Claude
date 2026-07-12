@@ -174,6 +174,11 @@ function ToolsDialog({ slug, name, open, onClose }: {
                 <p className="text-[12px] text-muted">{tool.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {!tool.trusted ? (
+                  <Badge tone="warn" title="User-registered — always needs your approval">
+                    approval
+                  </Badge>
+                ) : null}
                 {tool.external_side_effects ? <Badge tone="warn">external</Badge> : null}
                 <RiskBadge risk={tool.risk_level} />
                 {!tool.enabled ? <Badge tone="danger">off</Badge> : null}
@@ -214,10 +219,15 @@ function AddResourceDialog({ open, onClose }: { open: boolean; onClose: () => vo
       <div className="space-y-4">
         <Field label="Type">
           <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="w-full">
-            <option value="mcp_server">MCP server (trusted)</option>
+            <option value="mcp_server">MCP server</option>
             <option value="n8n_webhook">n8n webhook</option>
           </Select>
         </Field>
+        <p className="rounded-[10px] border border-line bg-raised px-3 py-2 text-[12px] text-muted">
+          Tools you register here are <strong>untrusted</strong>: every call needs your approval,
+          even if labeled read-only. To let one run automatically, add an allow rule in
+          Settings → Policies.
+        </p>
         <Field label="Name" hint="Letters, numbers, dashes and underscores.">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-tools" />
         </Field>

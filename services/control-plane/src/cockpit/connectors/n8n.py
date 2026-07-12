@@ -53,12 +53,16 @@ class N8nConnector(BaseConnector):
                     output_schema=hook.get("output_schema", {"type": "object"}),
                     access=ToolAccess.READ if read_only else ToolAccess.WRITE,
                     risk_level=RiskLevel.R1 if read_only else RiskLevel.R3,
-                    external_side_effects=not read_only,
+                    # A webhook always leaves this machine — it has external side effects even
+                    # when the user labels it "read only" (which only lowers the risk label).
+                    external_side_effects=True,
                     supports_dry_run=bool(hook.get("supports_dry_run", False)),
                     idempotent=False,
                     timeout_seconds=int(hook.get("timeout_seconds", 60)),
                     retry=RetryPolicy(max_attempts=1),
-                    approval="required" if not read_only else "auto",
+                    approval="required",
+                    # User-registered at runtime → never auto-run on its own classification.
+                    trusted=False,
                     undo_strategy=hook.get("undo_strategy", ""),
                 )
             )
@@ -83,8 +87,27 @@ class N8nConnector(BaseConnector):
             )
         return HealthStatus(ConnectorHealthState.OK, f"{len(hooks)} webhook(s) registered")
 
+    async def preview(
+        self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        # n8n's dry-run asks the workflow itself to preview — still an external call, but the
+        # workflow contract is that dry_run=True performs no side effect. Only reachable when
+        # the webhook was registered supports_dry_run=true.
+        return await self._invoke(tool_id, validated_input, ctx, dry_run=True)
+
     async def execute(
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        assert not ctx.dry_run, "real n8n invoke called for a dry-run"
+        return await self._invoke(tool_id, validated_input, ctx, dry_run=False)
+
+    async def _invoke(
+        self,
+        tool_id: str,
+        validated_input: dict[str, Any],
+        ctx: ExecutionContext,
+        *,
+        dry_run: bool,
     ) -> ToolResult:
         name = tool_id.removeprefix("n8n.")
         hook = next((h for h in self._webhooks() if h["name"] == name), None)
@@ -93,7 +116,7 @@ class N8nConnector(BaseConnector):
 
         body = json.dumps(
             {
-                "dry_run": ctx.dry_run,
+                "dry_run": dry_run,
                 "payload": validated_input,
                 "correlation_id": ctx.correlation_id,
             },
@@ -136,6 +159,6 @@ class N8nConnector(BaseConnector):
         return ToolResult(
             ok=True,
             data=data,
-            summary=f"n8n workflow “{name}” {'previewed (dry run)' if ctx.dry_run else 'executed'}",
-            external_confirmed=not ctx.dry_run,
+            summary=f"n8n workflow “{name}” {'previewed (dry run)' if dry_run else 'executed'}",
+            external_confirmed=not dry_run,
         )

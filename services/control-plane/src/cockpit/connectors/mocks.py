@@ -16,6 +16,7 @@ from cockpit.connectors.base import (
     ConnectorError,
     ExecutionContext,
     HealthStatus,
+    PreviewNotSupported,
     ToolResult,
 )
 from cockpit.enums import ConnectorHealthState
@@ -41,6 +42,21 @@ class GoogleWorkspaceMockConnector(BaseConnector):
             "Mock — not connected to a real Google account. Data shown is demo data.",
         )
 
+    async def preview(
+        self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
+    ) -> ToolResult:
+        if tool_id == "google.calendar.create_event":
+            return ToolResult(
+                ok=True,
+                data={
+                    "created": False,
+                    "demo": True,
+                    "diff": f"+ {validated_input.get('title')} at {validated_input.get('start')}",
+                },
+                summary="Preview: would create calendar event (demo)",
+            )
+        raise PreviewNotSupported(f"{tool_id} has no preview")
+
     async def execute(
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
     ) -> ToolResult:
@@ -54,17 +70,7 @@ class GoogleWorkspaceMockConnector(BaseConnector):
                     summary=f"Fetched {len(events)} calendar events (demo data)",
                 )
             case "google.calendar.create_event":
-                if ctx.dry_run:
-                    return ToolResult(
-                        ok=True,
-                        data={
-                            "created": False,
-                            "demo": True,
-                            "diff": f"+ {validated_input.get('title')} at "
-                            f"{validated_input.get('start')}",
-                        },
-                        summary="Preview: would create calendar event (demo)",
-                    )
+                assert not ctx.dry_run, "real create_event called for a dry-run"
                 event = {
                     **validated_input,
                     "id": f"demo-evt-{len(self._created_events) + 1}",

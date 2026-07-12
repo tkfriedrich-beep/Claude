@@ -1017,6 +1017,8 @@ export interface components {
             risk_level: string;
             /** External Side Effects */
             external_side_effects: boolean;
+            /** Trusted */
+            trusted: boolean;
             /** Enabled */
             enabled: boolean;
         };

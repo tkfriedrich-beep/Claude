@@ -55,8 +55,18 @@ _inproc_store: list[str] = []
 
 
 def normalize_mcp_tool(
-    server_name: str, name: str, description: str, input_schema: dict[str, Any], *, read_only: bool
+    server_name: str,
+    name: str,
+    description: str,
+    input_schema: dict[str, Any],
+    *,
+    read_only: bool,
+    trusted: bool = False,
 ) -> ToolManifest:
+    # `trusted=False` (the default for discovered/remote servers) means the policy won't
+    # auto-run the tool on the server's self-declared readOnlyHint — a registered MCP server
+    # is not a grant of trust. The built-in in-process demo server passes trusted=True.
+    external = not (trusted and read_only)
     return ToolManifest(
         id=f"mcp.{server_name}.{name}",
         connector="mcp",
@@ -67,12 +77,13 @@ def normalize_mcp_tool(
         output_schema={"type": "object"},  # MCP results are normalized to {content: ...}
         access=ToolAccess.READ if read_only else ToolAccess.WRITE,
         risk_level=RiskLevel.R1 if read_only else RiskLevel.R3,
-        external_side_effects=not read_only,
+        external_side_effects=external,
         supports_dry_run=False,
         idempotent=False,
         timeout_seconds=45,
         retry=RetryPolicy(max_attempts=1),
-        approval="auto" if read_only else "required",
+        approval="auto" if (read_only and trusted) else "required",
+        trusted=trusted,
     )
 
 
@@ -98,6 +109,7 @@ class MCPConnector(BaseConnector):
                             spec["description"],
                             spec["input_schema"],
                             read_only=spec["read_only"],
+                            trusted=True,  # built-in demo server, in-process (no external call)
                         )
                     )
             else:
@@ -165,12 +177,9 @@ class MCPConnector(BaseConnector):
                 ok=True, data={"content": inp["message"]}, summary="Echoed message (demo MCP)"
             )
         if tool_name == "todo_add":
-            if ctx.dry_run:
-                return ToolResult(
-                    ok=True,
-                    data={"content": f"(dry run) would add: {inp['text']}"},
-                    summary="Previewed todo add (demo MCP)",
-                )
+            # MCP tools declare supports_dry_run=False, so the gateway never routes a preview
+            # here (there is no standard MCP dry-run). This is always the real effect.
+            assert not ctx.dry_run, "MCP tools have no preview path"
             _inproc_store.append(inp["text"])
             return ToolResult(
                 ok=True,
