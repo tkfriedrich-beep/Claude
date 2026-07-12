@@ -37,7 +37,7 @@ export default function AgendaPage() {
             <ul className="space-y-2">
               {data.events.map((event) => (
                 <li key={event.id} className="flex items-center gap-3 rounded-[10px] border border-line bg-raised px-3.5 py-2.5">
-                  <time className="w-14 shrink-0 font-mono text-[12.5px] text-muted">{fmtTime(event.start)}</time>
+                  <time className="w-16 shrink-0 whitespace-nowrap font-mono text-[12.5px] text-muted">{fmtTime(event.start)}</time>
                   <span className="text-[13.5px]">{event.title}</span>
                   {event.demo ? <Badge tone="outline" className="ml-auto">demo</Badge> : null}
                 </li>

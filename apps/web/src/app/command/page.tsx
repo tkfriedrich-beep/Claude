@@ -54,19 +54,30 @@ function CommandInner() {
         session_id: sessionId ?? undefined,
         skill_slug: skillSlug || undefined,
       }),
-    onSuccess: (run) => {
+    onSuccess: async (run) => {
       setText("");
       queryClient.invalidateQueries({ queryKey: ["runs"] });
-      if (run.kind === "chat") {
-        // session id materializes once the worker picks the run up
-        setTimeout(async () => {
-          const detail = await api.run(run.id);
-          if (detail.session_id) router.replace(`/command?session=${detail.session_id}`);
-          queryClient.invalidateQueries({ queryKey: ["session-runs"] });
-          queryClient.invalidateQueries({ queryKey: ["sessions"] });
-        }, 700);
-      } else {
+      if (run.kind !== "chat") {
         router.push(`/history/${run.id}`);
+        return;
+      }
+      if (sessionId) {
+        queryClient.invalidateQueries({ queryKey: ["session-runs", sessionId] });
+        return;
+      }
+      // the session id materializes when the worker claims the run — poll briefly
+      for (let attempt = 0; attempt < 20; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+          const detail = await api.run(run.id);
+          if (detail.session_id) {
+            router.replace(`/command?session=${detail.session_id}`);
+            queryClient.invalidateQueries({ queryKey: ["sessions"] });
+            return;
+          }
+        } catch {
+          /* transient — retry */
+        }
       }
     },
   });

@@ -50,6 +50,7 @@ export function ActivityRail({ open, onToggle }: { open: boolean; onToggle: () =
         <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted">Activity</h2>
         <div className="flex items-center gap-2">
           <span
+            role="status"
             aria-label={connected ? "Live" : "Reconnecting"}
             title={connected ? "Live event stream connected" : "Reconnecting…"}
             className={cn("size-2 rounded-full", connected ? "bg-accent" : "bg-warn")}

@@ -199,7 +199,7 @@ export default function HomePage() {
               <ul className="space-y-1.5">
                 {briefing.agenda.events.slice(0, 5).map((event) => (
                   <li key={event.id} className="flex items-baseline gap-3 text-[13.5px]">
-                    <time className="w-12 shrink-0 font-mono text-[12px] text-muted">
+                    <time className="w-16 shrink-0 whitespace-nowrap font-mono text-[12px] text-muted">
                       {fmtTime(event.start)}
                     </time>
                     <span className="truncate">{event.title}</span>

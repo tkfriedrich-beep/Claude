@@ -4,16 +4,70 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · ❌ blocked
 
 ## Current state
 
-**Control plane (M1+M2) done and verified; M3 backend skills done.** Web app next.
+**MVP complete and verified (2026-07-12).** All milestones done; acceptance criteria below.
 
 | Milestone | Status |
 | --- | --- |
-| M0 — Foundation & design contract | ✅ (docs/scaffold) · cockpit shell lands with the web app |
+| M0 — Foundation & design contract | ✅ |
 | M1 — Durable local core | ✅ |
-| M2 — Claude runtime & live command control | ✅ (backend; UI pending) |
-| M3 — Useful local skills | ✅ (backend + demo data; UI pending) |
-| M4 — Integrations & automations | ✅ (backend; UI pending) |
-| M5 — Hardening & polish | ⬜ |
+| M2 — Claude runtime & live command control | ✅ (incl. live Claude session verified) |
+| M3 — Useful local skills | ✅ |
+| M4 — Integrations & automations | ✅ |
+| M5 — Hardening & polish | ✅ |
+
+## Final test results (all actually executed 2026-07-12)
+
+| Gate | Result |
+| --- | --- |
+| `pytest` (control plane) | **87 passed** |
+| `ruff check` + `ruff format --check` | clean |
+| `mypy src` | no issues in 52 files |
+| `pnpm typecheck` (web) | clean |
+| `pnpm lint` (web) | clean |
+| `vitest` | 6 passed |
+| `pnpm build` (web) | clean production build |
+| Playwright e2e (desktop + mobile, real control plane) | **10 passed** (see list below) |
+| `python -m cockpit.doctor` (fresh env) | 0 failures, 1 warning (no workspace yet — expected) |
+| Live Claude runtime | chat turn completed (69 tokens out, $0.17 captured), resume in same provider session verified |
+
+E2E coverage: onboarding+demo → cockpit · keyboard palette + axe (serious/critical = 0) ·
+project-pulse to completion with sources · **approval flow: deny skips / approve executes
+exactly once, file verified on disk, nothing written before approval** · history + replayable
+timeline · chat streaming (demo runtime) · mobile bottom-tab navigation, no horizontal
+overflow · desktop + mobile screenshots → `docs/screenshots/`.
+
+## MVP acceptance criteria (BUILD_BRIEF) — evidence
+
+1. ✅ Setup & launch documented, no Docker (`make setup/dev`, README, RUNBOOK; exercised)
+2. ✅ Demo mode without credentials (mock runtime + demo data; e2e passes with no keys)
+3. ✅ Polished responsive home, keyboard accessible, verified desktop+mobile (screenshots)
+4. ✅ Otto pulse reflects real run state; `prefers-reduced-motion` disables all animation
+5. ✅ Claude-backed session: start/stream/interrupt/cancel/resume (mock in e2e; **real Claude
+      verified live** — tokens/cost captured, resume via stored external session id)
+6. ✅ Proposed side effect → approval; cannot execute before it (gateway test + e2e fs check)
+7. ✅ Safe Mode blocks external writes (policy unit test + gateway test)
+8. ✅ Project Pulse reads local vault, source-linked result (pytest + e2e)
+9. ✅ Decision Memo → durable Markdown + JSON artifacts (pytest + e2e API check)
+10. ✅ Idea Triage never alters sources without approval (pytest + e2e: 0 files before, 1 after)
+11. ✅ Run history survives restarts (SQLite; interrupted-run recovery + resume path tested)
+12. ✅ Connector health & permissions visible (Integrations UI, health checks, tools dialog)
+13. ✅ Secrets absent from logs/events (redaction unit tests; config API rejects secret-like)
+14. ✅ Unit tests: policy (20), FSM, schemas, routing, gateway, skills — 87 total
+15. ✅ E2E: onboarding/demo, skill run, approval deny, approval success, history, responsive nav
+16. ✅ `make doctor` reports prerequisites/config with fixes (CLI + API verified)
+17. ✅ `make test` passes (87 + 6); no hidden failures
+18. ✅ README: setup, architecture, security model, data locations, backup/export, troubleshooting
+
+## Known limitations (honest)
+
+- Claude chat exposes read-only tools only (ADR-011); writes go through skills + approvals.
+- Research Run is knowledge-based (no web connector yet) and says so in every memo.
+- Idea scoring is keyword-heuristic — labeled as such in scorecards/SKILL.md.
+- MCP stdio path implemented but exercised via the in-proc demo server in tests; real stdio
+  servers depend on the user's local commands.
+- Local process discipline ≠ hardened sandbox (see THREAT_MODEL).
+- The `chat command streams` e2e showed one flake during development (dev-server Fast Refresh
+  mid-run); final full runs passed 10/10.
 
 ## Environment (inspected 2026-07-12)
 
@@ -94,4 +148,14 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
 - [x] Google/Notion/GitHub mock connectors (health=mock, `demo:true` payloads, read-only)
 - [x] Config API rejects credential-shaped values (secrets stay in env)
 
-### M5 — Hardening & polish — ⬜ (web app + e2e + screenshots next)
+### Web cockpit + M5 — Hardening & polish — ✅ (2026-07-12)
+
+- [x] Full cockpit UI (all 9 core screens + agenda/projects/people/knowledge), design tokens,
+      Otto pulse, activity rail, ⌘K palette, mobile bottom tabs
+- [x] Loading/empty/error/permission states everywhere; demo data labeled; reduced motion
+- [x] Playwright e2e vs a REAL control plane (isolated data dir): 10/10 passing incl. axe
+      (0 serious/critical) and the full approval deny→approve→exactly-one-write flow
+- [x] Desktop + mobile screenshots in docs/screenshots/
+- [x] a11y fix from axe (role=status on live indicator); UI polish from screenshot review
+- [x] Live Claude runtime verified (chat + resume, usage captured)
+- [x] Final gates re-run after every fix (tables above)

@@ -15,6 +15,7 @@ dist/
 
 # local state (never commit user data)
 data/local/
+data/e2e/
 *.db
 *.db-wal
 *.db-shm

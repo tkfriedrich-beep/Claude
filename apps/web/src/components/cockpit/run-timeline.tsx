@@ -20,6 +20,8 @@ export function RunTimeline({ runId }: { runId: string }) {
   const { data: events, isLoading } = useQuery({
     queryKey: ["run-events", runId],
     queryFn: () => api.runEvents(runId),
+    // SSE invalidation is the fast path; a light poll guarantees convergence.
+    refetchInterval: 2_000,
   });
 
   if (isLoading) return <CardSkeleton lines={5} />;

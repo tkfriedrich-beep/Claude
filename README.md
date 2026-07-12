@@ -14,6 +14,13 @@ The cockpit answers four questions within five seconds of opening:
 > Governing brief: [`BUILD_BRIEF.md`](BUILD_BRIEF.md) · Progress log: [`PROGRESS.md`](PROGRESS.md) ·
 > Decisions: [`DECISIONS.md`](DECISIONS.md)
 
+<p align="center">
+  <img src="docs/screenshots/home-desktop.png" alt="AgenticOS Cockpit home screen (desktop, demo data)" width="720" />
+</p>
+
+*Home cockpit on demo data — desktop above; mobile and approval-queue captures in
+[`docs/screenshots/`](docs/screenshots/).*
+
 ---
 
 ## Quick start

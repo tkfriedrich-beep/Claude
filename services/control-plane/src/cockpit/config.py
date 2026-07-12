@@ -22,7 +22,13 @@ class Settings(BaseSettings):
     connectors_dir: Path = _repo_root() / "connectors"
 
     port: int = 8787
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # localhost web app origins only (3100 = e2e test server)
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3100",
+        "http://127.0.0.1:3100",
+    ]
 
     safe_mode_default: bool = True
     daily_budget_usd: float = 5.0
