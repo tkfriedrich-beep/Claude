@@ -1,0 +1,21 @@
+id: business-idea-triage
+name: Business Idea Triage
+description: Score every idea in your ideas folder (problem, market, monetization, moat, validation), pick the next validation action, and offer to write scorecards back — only with your approval.
+version: 0.1.0
+domains: [ventures]
+risk_level: R2
+default_autonomy: 3
+required_connectors: [local-files]
+allowed_tools:
+  - local_files.list
+  - local_files.read
+  - local_files.write
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 180
+max_steps: 40
+verification_rules:
+  - artifact_exists:markdown
+  - sources_nonempty
+  - output_schema_valid
+  - no_unconfirmed_success

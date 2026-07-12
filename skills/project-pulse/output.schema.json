@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "source": { "type": "string" },
+          "moved_this_week": { "type": "boolean" },
+          "age_days": { "type": "integer" },
+          "open_tasks": { "type": "integer" },
+          "done_tasks": { "type": "integer" },
+          "blocked_items": { "type": "array", "items": { "type": "string" } },
+          "next_actions": { "type": "array", "items": { "type": "string" } },
+          "risks": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["name", "source", "moved_this_week"]
+      }
+    },
+    "generated_at": { "type": "string" }
+  },
+  "required": ["projects"]
+}

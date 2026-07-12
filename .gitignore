@@ -32,3 +32,4 @@ coverage/
 
 # os
 .DS_Store
+data/demo/**/*.scorecard.md

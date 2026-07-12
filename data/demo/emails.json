@@ -1,0 +1,8 @@
+{
+  "demo": true,
+  "messages": [
+    { "id": "demo-msg-1", "from": "jonas.petersen@nordwind-logistics.example", "subject": "Re: Pilot scope", "snippet": "Looking forward to the scope document — could you include the reference you mentioned?", "date": "2026-07-11T09:14:00Z", "demo": true },
+    { "id": "demo-msg-2", "from": "maya@lindholmdesign.example", "subject": "Homepage v2 comments", "snippet": "Left comments in the doc. Hero is close; the proof section still feels generic.", "date": "2026-07-10T16:40:00Z", "demo": true },
+    { "id": "demo-msg-3", "from": "sofia.keller@kellersteuer.example", "subject": "VAT documents Q2", "snippet": "Reminder: please send the Q2 documents by the 5th.", "date": "2026-07-09T08:02:00Z", "demo": true }
+  ]
+}

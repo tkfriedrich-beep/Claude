@@ -1,0 +1,28 @@
+id: morning-brief
+name: Morning Brief
+description: Agenda, due commitments, pending approvals, project movement, and notable note changes — one screenful, sources linked, demo data clearly labeled.
+version: 0.1.0
+domains: [today]
+risk_level: R1
+default_autonomy: 3
+required_connectors: [google-workspace, obsidian]
+allowed_tools:
+  - google.calendar.list_events
+  - obsidian.recent_changes
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 90
+max_steps: 10
+verification_rules:
+  - artifact_exists:markdown
+input_schema:
+  type: object
+  properties: {}
+  additionalProperties: false
+output_schema:
+  type: object
+  properties:
+    agenda: { type: array }
+    agenda_is_demo: { type: boolean }
+    commitments_due: { type: array }
+  required: [agenda, agenda_is_demo]

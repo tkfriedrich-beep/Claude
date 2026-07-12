@@ -1,0 +1,103 @@
+id: obsidian
+name: Obsidian Vault
+version: 0.1.0
+category: local
+description: Vault-aware notes access (/raw, /wiki, /projects) with frontmatter parsing.
+auth_type: none
+capabilities: [notes.read, notes.search, notes.write]
+data_sensitivity: normal
+default_mode: read_write
+tools:
+  - id: obsidian.list_notes
+    name: List notes
+    description: List Markdown notes in a vault section
+    capability: notes.read
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        section: { type: string, enum: [raw, wiki, projects, all], default: all }
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { notes: { type: array } }
+      required: [notes]
+    timeout_seconds: 15
+  - id: obsidian.read_note
+    name: Read note
+    description: Read one note with frontmatter
+    capability: notes.read
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties: { path: { type: string } }
+      required: [path]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        content: { type: string }
+        frontmatter: { type: object }
+      required: [content]
+    timeout_seconds: 15
+  - id: obsidian.search_notes
+    name: Search notes
+    description: Search note text across the vault
+    capability: notes.search
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        query: { type: string, minLength: 1 }
+        section: { type: string, enum: [raw, wiki, projects, all], default: all }
+      required: [query]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { matches: { type: array } }
+      required: [matches]
+    timeout_seconds: 20
+  - id: obsidian.recent_changes
+    name: Recent changes
+    description: Notes modified in the last N days
+    capability: notes.read
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        days: { type: integer, minimum: 1, maximum: 90, default: 7 }
+        section: { type: string, enum: [raw, wiki, projects, all], default: all }
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { changed: { type: array } }
+      required: [changed]
+    timeout_seconds: 15
+  - id: obsidian.write_note
+    name: Write note
+    description: Create or update a note in the vault (diff preview, approval required)
+    capability: notes.write
+    access: write
+    risk_level: R2
+    supports_dry_run: true
+    idempotent: true
+    approval: required
+    undo_strategy: "Previous content is preserved in the approval diff; re-write to restore."
+    input_schema:
+      type: object
+      properties:
+        path: { type: string, description: "Vault-relative path, e.g. wiki/idea.md" }
+        content: { type: string }
+      required: [path, content]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        written: { type: boolean }
+        diff: { type: string }
+      required: [written]
+    timeout_seconds: 15

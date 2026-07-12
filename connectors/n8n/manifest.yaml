@@ -1,0 +1,13 @@
+id: n8n
+name: n8n Workflows
+version: 0.1.0
+category: automation
+description: >
+  Invoke your n8n workflows through signed webhooks. Each registered webhook becomes a typed
+  tool (n8n.<name>) with its own input/output schema, timeout, and dry-run support. External
+  actions are always labeled and approval-gated.
+auth_type: hmac_env_secret
+capabilities: [workflow.invoke]
+data_sensitivity: normal
+default_mode: read_write
+tools: []   # generated dynamically from registered webhooks

@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "decision": { "type": "string" },
+    "options": { "type": "array" },
+    "recommendation": { "type": "string" },
+    "recommendation_rationale": { "type": "string" },
+    "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+    "review_date": { "type": "string" },
+    "generation_mode": { "type": "string", "enum": ["deterministic", "llm_assisted"] }
+  },
+  "required": ["decision", "recommendation", "confidence", "review_date", "generation_mode"]
+}
