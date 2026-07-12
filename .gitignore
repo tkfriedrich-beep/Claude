@@ -1,0 +1,34 @@
+# dependencies / envs
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# builds
+apps/web/.next/
+apps/web/out/
+dist/
+*.tsbuildinfo
+
+# local state (never commit user data)
+data/local/
+*.db
+*.db-wal
+*.db-shm
+
+# secrets
+.env
+.env.local
+services/control-plane/.env
+
+# test output
+apps/web/test-results/
+apps/web/playwright-report/
+coverage/
+.coverage
+
+# os
+.DS_Store
