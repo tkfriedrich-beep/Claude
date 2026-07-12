@@ -115,3 +115,33 @@ are explicitly flagged **[deviation]**.
   a dropped connection never loses events.
 - **Consequences:** The UI can always reconstruct state from the DB; live updates are an
   optimization, not a source of truth.
+
+## ADR-013 — Adversarial-review fixes; live chat cannot run approval-gated tools **[tightening]**
+
+- **Context:** An external adversarial review (`docs/reviews/ADVERSARIAL_REVIEW_PROMPT.md`)
+  produced six confirmed findings (`docs/reviews/codex-findings.md`). All were verified against
+  the code and fixed.
+- **Decisions:**
+  - **F1 (double external write on crash):** the gateway now durably commits a tool call's
+    `running` intent *before* dispatching a non-idempotent external write; on resume a
+    `running` row for such a tool is treated as ambiguous and is **never auto-replayed** — it
+    fails with a reconciliation message. Idempotent/local writes still replay safely.
+  - **F2 (symlink write escape):** `local_files`/`obsidian` writes now go through
+    `contain_write_target`, which rejects a symlinked final component and requires the
+    `realpath`-resolved target to stay within a configured root.
+  - **F3 (claim CAS):** run claiming keys off `worker_claim IS NULL` (not `status`), so a
+    claimed-but-not-yet-started run can neither be re-selected nor re-claimed; `worker_claim`
+    is cleared on re-queue and for stray queued rows at startup.
+  - **F4 (worker starvation):** a live chat turn no longer blocks a worker slot waiting on a
+    human. If a chat-requested tool needs approval it is **denied** with guidance to run it as
+    a skill. Chat is only granted auto-allowed read-only tools today, so this removes a latent
+    local DoS without removing any working capability. Promoting chat to approval-gated tools
+    requires session parking (persist the provider continuation, release the slot, resume on
+    resolution) — deferred.
+  - **F5 (SSE dup/omission):** the event stream tracks a delivered high-water mark, pages the
+    full backfill, and drops live events at or below the mark.
+  - **F6 (event-bus leak):** empty per-run subscription sets are removed on unsubscribe and the
+    per-run seq lock is dropped when a run emits a terminal event.
+- **Consequences:** The headline "no duplicate external actions" promise now holds across a
+  mid-write crash; the filesystem boundary holds against symlink escape; the worker cannot be
+  starved or spun into duplicate execution. Regression tests cover each finding.

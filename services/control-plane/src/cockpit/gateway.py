@@ -201,6 +201,36 @@ class ToolGateway:
         if existing is not None and existing.status == ToolCallStatus.DENIED:
             raise ToolDenied(existing.error or "You denied this action.")
 
+        # A call left RUNNING is one that was dispatched but never recorded completion —
+        # i.e. the process died between the connector effect and the commit (F1). For a
+        # non-idempotent external write the effect MAY have landed, so we must never
+        # auto-replay it: mark it failed and make the human reconcile. (Idempotent/local
+        # writes are safe to re-run and fall through.)
+        if (
+            existing is not None
+            and existing.status == ToolCallStatus.RUNNING
+            and tool.external_side_effects
+            and not tool.idempotent
+        ):
+            existing.status = ToolCallStatus.FAILED.value
+            existing.error = (
+                "Interrupted after this action was dispatched — its external effect may "
+                "already have happened. It was not retried automatically. Check the target "
+                "system, then run it again explicitly if it did not complete."
+            )
+            await self.bus.emit(
+                session,
+                workspace_id=run.workspace_id,
+                run_id=run.id,
+                type=EventType.TOOL_FAILED,
+                payload={
+                    "tool_id": tool_id,
+                    "reason": "interrupted after dispatch — not auto-retried",
+                    "needs_reconciliation": True,
+                },
+            )
+            raise ToolDenied(existing.error, decision=None)
+
         import dataclasses
 
         base_ctx = await self._policy_context(session, run)
@@ -443,6 +473,11 @@ class ToolGateway:
             type=EventType.TOOL_STARTED,
             payload={"tool_id": tool.id, "purpose": tool_call.purpose, "dry_run": dry_run},
         )
+        # Durably persist the RUNNING intent BEFORE dispatching a non-idempotent external
+        # write, so a crash mid-call leaves a visible RUNNING row and resume refuses to
+        # replay it (F1 — never double-fire an external effect).
+        if tool.external_side_effects and not tool.idempotent and not dry_run:
+            await session.commit()
 
         attempts = max(1, tool.retry.max_attempts)
         last_error: str | None = None

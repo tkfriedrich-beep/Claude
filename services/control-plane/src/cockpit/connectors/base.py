@@ -6,6 +6,7 @@ policy, handles approvals/idempotency/timeouts/retries, and calls Connector.exec
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -138,4 +139,38 @@ def contain_path(candidate: str | Path, roots: list[Path]) -> Path:
             continue
     raise ConnectorError(
         f"Path “{candidate}” is outside the configured roots — refusing to touch it."
+    )
+
+
+def contain_write_target(candidate: str | Path, roots: list[Path]) -> Path:
+    """Resolve a *write* target and require it stays under a root — following symlinks.
+
+    `contain_path` is enough for reads (it resolves the whole path), but for writes the
+    caller must also refuse a symlinked final component that points outside a root
+    (`os.path.realpath` resolves symlinks even for a not-yet-existing tail). This closes the
+    "write through a symlink escapes the workspace" hole (review F2).
+    """
+    raw = Path(candidate).expanduser()
+    name = raw.name
+    if name in ("", ".", ".."):
+        raise ConnectorError(f"Refusing to write to “{candidate}” — invalid file name.")
+    # Parent must itself be inside a root (resolving any symlinks along the way).
+    parent = contain_path(raw.parent, roots)
+    target = parent / name
+    if target.is_symlink():
+        raise ConnectorError(
+            f"Refusing to write through the symlink “{candidate}” — it may point outside "
+            "the workspace."
+        )
+    # realpath resolves symlinks (incl. a symlinked tail / parent) and normalizes `..`;
+    # the fully-resolved location must remain within a root.
+    final = Path(os.path.realpath(target))
+    for root in roots:
+        try:
+            final.relative_to(root.resolve())
+            return target
+        except ValueError:
+            continue
+    raise ConnectorError(
+        f"Path “{candidate}” resolves outside the configured roots — refusing to write it."
     )

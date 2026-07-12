@@ -84,6 +84,10 @@ async def transition(
     now = datetime.now(UTC)
     run.status = to.value
     run.status_reason = reason
+    if to is RunStatus.QUEUED:
+        # Re-queued (resume / approval continuation): drop any stale claim so a worker can
+        # pick it up again — the claim guard keys off worker_claim being NULL (review F3).
+        run.worker_claim = None
     if frm is RunStatus.QUEUED and to is RunStatus.TRIAGING:
         run.started_at = run.started_at or now
     if to in TERMINAL_STATUSES:

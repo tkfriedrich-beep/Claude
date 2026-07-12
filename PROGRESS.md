@@ -58,6 +58,30 @@ overflow · desktop + mobile screenshots → `docs/screenshots/`.
 17. ✅ `make test` passes (87 + 6); no hidden failures
 18. ✅ README: setup, architecture, security model, data locations, backup/export, troubleshooting
 
+## Post-MVP: adversarial review round 1 (2026-07-12)
+
+An external adversarial review (`docs/reviews/codex-findings.md`, prompt in
+`docs/reviews/ADVERSARIAL_REVIEW_PROMPT.md`) returned 6 findings. All were **verified against
+the code and fixed**; each has a regression test in `tests/test_review_fixes.py` (10 tests).
+See DECISIONS ADR-013.
+
+| # | Finding | Sev | Verdict | Fix |
+| --- | --- | --- | --- | --- |
+| F1 | Crash after external effect, before completion commit → resume re-fires the write | Critical | CONFIRMED | durable `running` intent committed before dispatch; a `running` non-idempotent external call is never auto-replayed on resume |
+| F2 | `local_files`/`obsidian` write follows a symlinked final component out of roots | Critical | CONFIRMED | `contain_write_target` rejects symlinked tail + `realpath` must stay within a root |
+| F3 | `claim_next_run` not a real CAS (leaves `status=queued`) → duplicate/unbounded task spawn | High | CONFIRMED | claim keys off `worker_claim IS NULL`; cleared on requeue + startup |
+| F4 | Two chat approvals hold both worker slots for 600s (latent — not reachable today) | High | CONFIRMED (latent) | live chat denies approval-gated tools instead of blocking; no worker-slot wait |
+| F5 | SSE backfill can duplicate events and omit >500 | Medium | CONFIRMED | high-water-mark dedupe + paginated full backfill |
+| F6 | EventBus retains a lock + run-key per run forever | Medium | CONFIRMED | evict empty subscription sets; drop seq lock on terminal event |
+
+Test gate after fixes: **pytest 97 passed** (was 87; +10 regression) · ruff + mypy clean ·
+vitest 6 · **e2e 10/10** (approval/resume path re-verified under the new claim + intent logic).
+
+Note the reviewer worked static-only (no network to clone/run), so its stated mechanism for F1
+(row "still running") was refined on verification — the intent row is actually rolled back on
+crash, which is why the durable pre-dispatch commit is the fix. F4 was confirmed real but not
+reachable in the shipped system (no chat-exposed approval-gated tool); fixed proactively.
+
 ## Known limitations (honest)
 
 - Claude chat exposes read-only tools only (ADR-011); writes go through skills + approvals.

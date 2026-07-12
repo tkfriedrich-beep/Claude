@@ -95,7 +95,14 @@ class EventBus:
         return q
 
     def unsubscribe(self, q: asyncio.Queue[dict[str, Any]], run_id: str | None = None) -> None:
-        (self._by_run.get(run_id, set()) if run_id else self._global).discard(q)
+        if run_id is None:
+            self._global.discard(q)
+            return
+        subs = self._by_run.get(run_id)
+        if subs is not None:
+            subs.discard(q)
+            if not subs:  # don't leak an empty set + key per run (review F6)
+                self._by_run.pop(run_id, None)
 
     def _publish(self, data: dict[str, Any]) -> None:
         for q in list(self._global) + list(self._by_run.get(data["run_id"], set())):
@@ -137,6 +144,10 @@ class EventBus:
             session.add(event)
             await session.flush()  # assigns autoincrement id
         self._publish(event_to_dict(event))
+        # A run emits nothing after a terminal event, so drop its seq lock rather than
+        # retaining one lock per historical run forever (review F6).
+        if type in (EventType.RUN_COMPLETED, EventType.RUN_FAILED, EventType.RUN_CANCELLED):
+            self._seq_locks.pop(run_id, None)
         return event
 
 

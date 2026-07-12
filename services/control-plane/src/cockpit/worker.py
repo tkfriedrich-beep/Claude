@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -26,7 +26,6 @@ from cockpit.gateway import ApprovalPending, ToolDenied, ToolGateway
 from cockpit.ids import new_id
 from cockpit.logging import get_logger
 from cockpit.models import (
-    Approval,
     Artifact,
     Memory,
     MemorySource,
@@ -564,7 +563,15 @@ class RunProcessor:
     async def _chat_permission(
         self, session: AsyncSession, run: Run, tool_name: str, tool_input: dict[str, Any]
     ) -> tuple[bool, str, dict[str, Any]]:
-        """Bridge provider tool requests to the gateway (approval-aware, poll-based)."""
+        """Bridge a live provider tool request to the gateway.
+
+        A live chat turn must NOT block a worker slot waiting on a human (review F4): if a
+        requested tool needs approval, deny it here with a clear message and let the user run
+        it as a skill (which parks cleanly on the approval queue instead of holding the
+        worker). Chat today is only granted auto-allowed read-only tools, so this denies
+        nothing that currently works — it removes a latent local-DoS, not a feature. Promoting
+        chat to approval-gated tools requires session parking (see DECISIONS ADR-013).
+        """
         try:
             result = await self.gateway.call_tool(
                 session,
@@ -579,49 +586,16 @@ class RunProcessor:
         except ToolDenied as exc:
             await session.commit()
             return False, exc.reason, tool_input
-        except ApprovalPending as pending:
-            await transition(session, self.bus, run, RunStatus.AWAITING_APPROVAL)
-            await session.commit()
-            resolved = await self._wait_for_approval(
-                session, pending.approval_id, timeout_seconds=600
+        except ApprovalPending:
+            # Roll back the pending approval/tool-call this attempt created so it doesn't
+            # linger in the queue for a run that will not continue it.
+            await session.rollback()
+            return (
+                False,
+                "This action needs your approval, which isn't available inside a live chat "
+                f"turn. Run “{tool_name}” as a skill so it goes through the approval queue.",
+                tool_input,
             )
-            fresh = await session.get(Run, run.id)
-            if fresh is not None and RunStatus(fresh.status) is RunStatus.AWAITING_APPROVAL:
-                await transition(
-                    session, self.bus, fresh, RunStatus.EXECUTING, reason="approval resolved"
-                )
-                await session.commit()
-            if not resolved:
-                return False, "Approval timed out.", tool_input
-            try:
-                result = await self.gateway.call_tool(
-                    session,
-                    run,
-                    tool_name,
-                    tool_input,
-                    purpose=f"Chat session wants to use {tool_name}",
-                )
-                await session.commit()
-                return result.ok, result.error or "", tool_input
-            except (ToolDenied, ApprovalPending) as exc:
-                await session.commit()
-                return False, str(exc), tool_input
-
-    async def _wait_for_approval(
-        self, session: AsyncSession, approval_id: str, *, timeout_seconds: int
-    ) -> bool:
-        deadline = datetime.now(UTC) + timedelta(seconds=timeout_seconds)
-        while datetime.now(UTC) < deadline:
-            await asyncio.sleep(1.0)
-            session.expire_all()
-            approval = await session.get(Approval, approval_id)
-            if approval is None:
-                return False
-            if approval.status == "approved":
-                return True
-            if approval.status in ("denied", "expired", "cancelled"):
-                return True  # resolved (gateway will translate denial into ToolDenied)
-        return False
 
     # ------------------------------------------------------------------ shared
 
@@ -684,10 +658,17 @@ class RunProcessor:
 
 async def claim_next_run(session: AsyncSession) -> Run | None:
     now = datetime.now(UTC)
+    # Only ever consider UNCLAIMED queued runs. The claim UPDATE below sets worker_claim but
+    # leaves status='queued' until process() flips it under the semaphore, so `worker_claim
+    # IS NULL` (not status) is what makes this an honest compare-and-swap: a run already
+    # claimed can neither be re-selected nor re-claimed, even under semaphore saturation
+    # (review F3). worker_claim is cleared whenever a run re-enters `queued` (see
+    # state_machine.transition) and for all queued runs at startup (recover_interrupted_runs).
     candidate = await session.scalar(
         select(Run)
         .where(
             Run.status == RunStatus.QUEUED.value,
+            Run.worker_claim.is_(None),
             (Run.scheduled_for.is_(None)) | (Run.scheduled_for <= now),
         )
         .order_by(Run.created_at)
@@ -697,11 +678,15 @@ async def claim_next_run(session: AsyncSession) -> Run | None:
         return None
     result = await session.execute(
         update(Run)
-        .where(Run.id == candidate.id, Run.status == RunStatus.QUEUED.value)
+        .where(
+            Run.id == candidate.id,
+            Run.status == RunStatus.QUEUED.value,
+            Run.worker_claim.is_(None),
+        )
         .values(worker_claim=WORKER_ID, heartbeat_at=now)
     )
     await session.commit()
-    if getattr(result, "rowcount", 0) != 1:  # CursorResult in practice; typed as Result
+    if getattr(result, "rowcount", 0) != 1:  # lost the race — another claimer won
         return None
     await session.refresh(candidate)
     return candidate
@@ -734,6 +719,13 @@ async def recover_interrupted_runs(session: AsyncSession, bus: EventBus) -> int:
             "Resume or restart it from History — completed external writes will "
             "not re-fire.",
         )
+    # A run claimed by the now-dead worker but not yet started stays `queued` with a stale
+    # worker_claim; clear those so this fresh process can claim them (review F3).
+    await session.execute(
+        update(Run)
+        .where(Run.status == RunStatus.QUEUED.value, Run.worker_claim.is_not(None))
+        .values(worker_claim=None)
+    )
     await session.commit()
     return len(stale)
 

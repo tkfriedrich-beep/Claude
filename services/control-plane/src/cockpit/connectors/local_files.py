@@ -16,6 +16,7 @@ from cockpit.connectors.base import (
     HealthStatus,
     ToolResult,
     contain_path,
+    contain_write_target,
 )
 from cockpit.enums import ConnectorHealthState
 
@@ -137,10 +138,9 @@ class LocalFilesConnector(BaseConnector):
         )
 
     def _write(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
-        raw_path = Path(inp["path"]).expanduser()
-        # Containment must hold for the *target*, including not-yet-existing files.
-        parent = contain_path(raw_path.parent, ctx.roots)
-        path = parent / raw_path.name
+        # Containment must hold for the *resolved* target — including not-yet-existing files
+        # and a symlinked final component that would escape the roots (review F2).
+        path = contain_write_target(inp["path"], ctx.roots)
         if fnmatch.fnmatch(path.name, ".*"):
             raise ConnectorError("Refusing to write hidden files.")
         new_content: str = inp["content"]

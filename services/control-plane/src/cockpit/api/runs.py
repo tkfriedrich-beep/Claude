@@ -256,27 +256,42 @@ async def event_stream(
 
     async def generator():
         queue = bus.subscribe(run_id)
+        # High-water mark of what we've already delivered. Live events at or below it were
+        # also seen by backfill, so we drop them — this closes both the subscribe-before-
+        # backfill duplicate window and (via paging) the >500-event omission (review F5).
+        last_sent = backfill_from or 0
         try:
             yield ": connected\n\n"
             if backfill_from is not None:
                 from cockpit.db import db_session
 
                 async with db_session() as session:
-                    query = (
-                        select(RunEvent)
-                        .where(RunEvent.workspace_id == workspace.id, RunEvent.id > backfill_from)
-                        .order_by(RunEvent.id)
-                        .limit(500)
-                    )
-                    if run_id:
-                        query = query.where(RunEvent.run_id == run_id)
-                    for event in (await session.scalars(query)).all():
-                        yield _sse(event_to_dict(event))
+                    while True:
+                        query = (
+                            select(RunEvent)
+                            .where(
+                                RunEvent.workspace_id == workspace.id,
+                                RunEvent.id > last_sent,
+                            )
+                            .order_by(RunEvent.id)
+                            .limit(500)
+                        )
+                        if run_id:
+                            query = query.where(RunEvent.run_id == run_id)
+                        rows = (await session.scalars(query)).all()
+                        for event in rows:
+                            yield _sse(event_to_dict(event))
+                            last_sent = event.id
+                        if len(rows) < 500:
+                            break
             while True:
                 if await request.is_disconnected():
                     break
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if data["id"] <= last_sent:
+                        continue  # already delivered during backfill — dedupe
+                    last_sent = data["id"]
                     yield _sse(data)
                 except TimeoutError:
                     yield ": keepalive\n\n"
