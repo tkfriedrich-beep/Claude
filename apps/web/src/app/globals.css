@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* ---------- Design tokens (source of truth — see docs/UX_SPEC.md) ---------- */
+
+:root {
+  /* light "parchment" */
+  --background: #f4f1ea;
+  --surface: #fbfaf7;
+  --surface-raised: #ffffff;
+  --ink: #1c1e1b;
+  --muted: #6f6b60;
+  --line: #e3ded2;
+  --accent: #12695b;
+  --accent-hover: #0d5044;
+  --accent-soft: #e3efe9;
+  --warn: #b97c10;
+  --warn-soft: #f6ecd7;
+  --danger: #a8452f;
+  --danger-soft: #f3e2dc;
+  --focus-ring: #12695b;
+}
+
+[data-theme="dark"] {
+  /* dark "midnight" */
+  --background: #131715;
+  --surface: #1a201d;
+  --surface-raised: #222925;
+  --ink: #eceae2;
+  --muted: #9a978c;
+  --line: #2d342f;
+  --accent: #4fb39b;
+  --accent-hover: #6cc5af;
+  --accent-soft: #1d312b;
+  --warn: #d9a03c;
+  --warn-soft: #33290f;
+  --danger: #c96f57;
+  --danger-soft: #38201a;
+  --focus-ring: #4fb39b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --radius-card: 14px;
+  --radius-control: 10px;
+}
+
+html {
+  background: var(--background);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ---------- Otto pulse (state-encoding motion; see UX_SPEC) ---------- */
+
+.otto-orb {
+  transform-origin: center;
+}
+.otto-idle .otto-core {
+  animation: otto-breathe 6s ease-in-out infinite;
+}
+.otto-thinking .otto-ring-1 {
+  animation: otto-orbit 2.6s linear infinite;
+}
+.otto-thinking .otto-ring-2 {
+  animation: otto-orbit 3.9s linear infinite reverse;
+}
+.otto-acting .otto-sweep {
+  animation: otto-sweep 1.4s ease-in-out infinite;
+}
+.otto-waiting .otto-core {
+  animation: otto-heartbeat 1.6s ease-in-out infinite;
+}
+.otto-completed .otto-core {
+  animation: otto-resolve 0.9s ease-out 1;
+}
+.otto-error .otto-alert {
+  animation: otto-alert 2.4s ease-in-out infinite;
+}
+
+@keyframes otto-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+@keyframes otto-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes otto-sweep {
+  0% { stroke-dashoffset: 260; }
+  100% { stroke-dashoffset: -260; }
+}
+@keyframes otto-heartbeat {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.08); }
+  24% { transform: scale(1); }
+  36% { transform: scale(1.05); }
+  48% { transform: scale(1); }
+}
+@keyframes otto-resolve {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+@keyframes otto-alert {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* The cockpit stays fully usable with motion off: state shows as color + label. */
+@media (prefers-reduced-motion: reduce) {
+  .otto-orb *, .animate-pulse, .animate-spin {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* thin scrollbars for rails */
+.rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* streaming caret */
+.stream-caret::after {
+  content: "▌";
+  color: var(--accent);
+  animation: otto-alert 1s ease-in-out infinite;
+}
