@@ -12,15 +12,19 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import event as sa_event
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session as SyncSession
 
 from cockpit.enums import EventType
 from cockpit.logging import get_logger, redact
 from cockpit.models import RunEvent
 
 log = get_logger("cockpit.events")
+
+_PENDING_KEY = "_pending_publish"
 
 
 def humanize(event_type: EventType, payload: dict[str, Any]) -> str:
@@ -155,16 +159,39 @@ class EventBus:
                     event = candidate
                     break
                 except IntegrityError:
-                    session.expunge(candidate)  # lost the seq race — recompute and retry
+                    # The savepoint rollback already detached `candidate`; expunging it again
+                    # raises InvalidRequestError and crashes the retry (review R3-F6). Do nothing —
+                    # the next iteration recomputes the seq and builds a fresh candidate.
                     continue
         if event is None:  # pragma: no cover — 8 consecutive conflicts is not realistic
             raise RuntimeError(f"could not assign a unique event seq for run {run_id}")
-        self._publish(event_to_dict(event))
+        # Persistence-first: queue the fan-out and publish it only after the caller's outer
+        # transaction COMMITS (see the after_commit hook). Publishing here would leak a “ghost”
+        # event to SSE subscribers that a later rollback erases from the DB (review R3-F7).
+        session.info.setdefault(_PENDING_KEY, []).append((self, event_to_dict(event)))
         # A run emits nothing after a terminal event, so drop its seq lock rather than
         # retaining one lock per historical run forever (review F6).
         if type in (EventType.RUN_COMPLETED, EventType.RUN_FAILED, EventType.RUN_CANCELLED):
             self._seq_locks.pop(run_id, None)
         return event
+
+
+@sa_event.listens_for(SyncSession, "after_commit")
+def _publish_after_commit(session: SyncSession) -> None:
+    """Fan out queued events only once the transaction that persisted them has committed.
+
+    This is the transactional-outbox half of the persistence-first contract (review R3-F7): an
+    event reaches SSE subscribers if and only if its row is durably in the DB.
+    """
+    pending = session.info.pop(_PENDING_KEY, None)
+    if pending:
+        for bus, data in pending:
+            bus._publish(data)
+
+
+@sa_event.listens_for(SyncSession, "after_rollback")
+def _drop_pending_on_rollback(session: SyncSession) -> None:
+    session.info.pop(_PENDING_KEY, None)
 
 
 def event_to_dict(e: RunEvent) -> dict[str, Any]:

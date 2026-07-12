@@ -35,17 +35,23 @@ class N8nConnector(BaseConnector):
         super().__init__(manifest_dir)
         self.runtime_config: dict[str, Any] = {}
 
-    def _webhooks(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
-        # On the execution path, prefer THIS workspace's config (threaded in via ctx.config from
-        # the DB Connector row) over the global singleton's runtime_config, so a call never routes
-        # to another workspace's webhook URL if it refreshed the singleton in between (R2-F8).
-        if ctx is not None and ctx.config.get("webhooks") is not None:
-            return list(ctx.config.get("webhooks", []))
-        return list(self.runtime_config.get("webhooks", []))
+    def _webhooks_in(self, config: dict[str, Any] | None) -> list[dict[str, Any]]:
+        # config=None → the process-global singleton (runtime_config); an explicit dict (even {})
+        # → THAT workspace's config verbatim. The gateway resolves a tool's manifest by passing the
+        # workspace's DB Connector.config here, so policy/durability/execution all describe the same
+        # webhook — never another workspace's singleton state (review R3-F2, R2-F8).
+        src = self.runtime_config if config is None else config
+        return list((src or {}).get("webhooks", []))
 
-    def list_tools(self) -> list[ToolManifest]:
+    def _webhooks(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
+        # Execution/health path: ctx.config is this workspace's config (empty {} → fall back to the
+        # singleton is safe here because policy already resolved the tool against the strict
+        # per-workspace manifest before we ever execute).
+        return self._webhooks_in((ctx.config or None) if ctx is not None else None)
+
+    def list_tools(self, config: dict[str, Any] | None = None) -> list[ToolManifest]:
         tools: list[ToolManifest] = []
-        for hook in self._webhooks():
+        for hook in self._webhooks_in(config):
             read_only = bool(hook.get("read_only", False))
             tools.append(
                 ToolManifest(
@@ -73,8 +79,11 @@ class N8nConnector(BaseConnector):
             )
         return tools
 
-    def get_tool(self, tool_id: str) -> ToolManifest | None:
-        return next((t for t in self.list_tools() if t.id == tool_id), None)
+    def get_tool(self, tool_id: str, config: dict[str, Any] | None = None) -> ToolManifest | None:
+        return next((t for t in self.list_tools(config) if t.id == tool_id), None)
+
+    def owns_tool(self, tool_id: str) -> bool:
+        return tool_id.startswith("n8n.")
 
     async def health_check(self, ctx: ExecutionContext) -> HealthStatus:
         hooks = self._webhooks(ctx)

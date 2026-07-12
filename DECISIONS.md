@@ -258,4 +258,70 @@ are explicitly flagged **[deviation]**.
   configured, and still runs offline. No new third-party SDK enters `apps/web`; the outbound surface
   is one governed connector with an SSRF boundary. Residual (documented in THREAT_MODEL /
   connector README): DNS rebinding between the guard's resolution and httpx's connect is not closed
-  in the MVP (would require pinning the connection to the validated IP).
+  in the MVP (would require pinning the connection to the validated IP). *(Closed in ADR-017 F1.)*
+
+## ADR-017 — Round-3 adversarial-review fixes: close the web-egress path and the F2/F6/F10 regressions **[tightening]**
+
+- **Context:** A third review (`docs/reviews/ADVERSARIAL_REVIEW_PROMPT_R3.md`) — the first the
+  reviewer could actually build and run — produced thirteen confirmed findings
+  (`docs/reviews/codex-findings-r3.md`): five Critical. Two were escalations of documented
+  residuals (DNS rebinding, the F8 singleton bound), and two were regressions my own round-2 fixes
+  introduced (the event-retry crash, executing a redacted edited value). Each was re-verified
+  against the on-branch code and fixed, with a regression test per finding
+  (`tests/test_review_r3_fixes.py`, plus updated R2 cases for F10/F13).
+- **Decisions:**
+  - **F1 — `web.fetch` pins the connection to the validated IP.** The guard resolves the host,
+    validates every address, then the request goes to `https://<ip>/…` with the original host as
+    the `Host` header and TLS SNI (via httpcore's `sni_hostname` extension). httpx connects to that
+    exact IP with no second DNS lookup, and the cert is still verified against the hostname — so a
+    DNS-rebinding flip after validation cannot reach a new internal address. Verified: httpcore
+    connects TCP to the URL host and uses `sni_hostname` for cert verification; a live pinned HTTPS
+    fetch succeeds.
+  - **F2 — per-workspace manifest resolution.** The gateway now identifies the owning connector
+    config-independently (`owns_tool`), then resolves the tool's `ToolManifest` from THIS
+    workspace's `Connector.config` (`_resolve_tool`) and carries that one object through the
+    replay/durability check, policy, and execution. A dynamic (n8n/MCP) tool can no longer be
+    policy-checked against another workspace's global-singleton manifest while executing its own —
+    which had let a write ride in as a "trusted read" past Safe Mode and defeat the no-double-fire
+    guard. `_run_connector` treats a present `Connector` row's config as authoritative (no singleton
+    fallback).
+  - **F3 — writes descend with O_NOFOLLOW on every component.** `open_contained_write` walks from a
+    root dir fd, opening each path component with `O_NOFOLLOW | O_DIRECTORY` via `dir_fd`, so a
+    parent directory swapped to a symlink after validation (a TOCTOU race) is rejected at open time,
+    not just the final component. `st_nlink > 1` still blocks hardlinks.
+  - **F4 — the web connector's secret env var is fixed in code** (`FIRECRAWL_API_KEY`); connector
+    config can no longer supply an `api_key_env`, so a config edit can't exfiltrate `ANTHROPIC_API_KEY`
+    (or any other process secret) to Firecrawl.
+  - **F5 — URL credentials are refused and redacted.** `web.fetch` rejects a URL with userinfo, and
+    the redactor masks `scheme://user:pass@` in any persisted string, so a basic-auth password never
+    lands in `tool_calls`/events/logs.
+  - **F6 — the event-seq retry no longer crashes.** The savepoint rollback already detaches the
+    conflicting candidate; `emit()` stopped calling `session.expunge()` on it (which raised
+    `InvalidRequestError`) and just rebuilds a fresh candidate on retry. Verified with two concurrent
+    sessions racing the same run.
+  - **F7 — events publish only after commit.** `emit()` queues the fan-out on `session.info`; an
+    `after_commit` hook drains it to subscribers and an `after_rollback` hook drops it — a
+    transactional outbox, so a rolled-back event never reaches SSE (the general form of R2-F9).
+  - **F8 — result persistence keys memories by (kind, content).** A proposal already persisted in
+    ANY status is left as-is on replay, so a memory approved between crash and resume is not
+    re-proposed as a duplicate.
+  - **F9 — citations are validated deterministically.** The memo's `[n]` references are checked
+    against the fetched-source count; out-of-range citations (an injected `[999]`) are flagged in
+    `unresolved` + a visible warning, not laundered into "Facts".
+  - **F10 — the approval edit executes the RAW value.** Storing a redacted copy meant the run wrote
+    the literal mask to disk and reported success; edited input is now stored verbatim, and
+    credential-shaped edits are rejected instead (still honoring R2-F5).
+  - **F11 — migration 0003 reconciles legacy duplicates.** Before creating the unique index it
+    renumbers any duplicate `(run_id, seq)` rows gap-free, so a legacy DB that hit the pre-fix event
+    race upgrades instead of failing at `CREATE UNIQUE INDEX`. Verified on a hand-built 0002 DB.
+  - **F12 — bounded fetch.** The body is streamed with a hard byte counter (no whole-body buffering),
+    and HTML→text uses a linear `str.find` scanner instead of the `.*?</\1>` regex that was O(n²) on
+    unclosed tags (a ReDoS).
+  - **F13 — exact claim ownership.** `claim_still_owned` now requires `worker_claim == worker_id`
+    exactly (a cleared or foreign claim aborts), closing the multi-process double-run the looser
+    check allowed.
+- **Consequences:** The new outbound-network surface is hardened against rebinding SSRF, credential
+  leakage, and fetch DoS; the per-workspace boundary is real for policy AND execution; and the two
+  regressions from round 2 are closed with tests that exercise the actual race/replay, not just the
+  happy path. Remaining honest bound (THREAT_MODEL): true multi-process worker safety still needs a
+  leased-claim protocol; the MVP ships single-process.

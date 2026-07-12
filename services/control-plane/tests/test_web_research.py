@@ -40,6 +40,34 @@ class FakeResp:
         return json.loads(self.content.decode())
 
 
+class FakeStreamResp:
+    """Minimal streamed-response stand-in for httpx.AsyncClient.stream (review R3-F12 uses it)."""
+
+    def __init__(self, status=200, headers=None, content=b"", url="http://93.184.216.34/"):
+        self.status_code = status
+        self.headers = headers or {}
+        self._content = content
+        self.encoding = "utf-8"
+        self.url = url
+
+    async def aiter_bytes(self):
+        yield self._content
+
+
+def _patch_stream(monkeypatch: pytest.MonkeyPatch, resp_for) -> None:
+    def stream(self, method, url, **kwargs):  # returns an async context manager (not a coroutine)
+        class _CM:
+            async def __aenter__(self_inner):
+                return resp_for(url)
+
+            async def __aexit__(self_inner, *a):
+                return False
+
+        return _CM()
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", stream)
+
+
 # --------------------------------------------------------------------------- SSRF guard
 @pytest.mark.parametrize(
     "url",
@@ -77,14 +105,14 @@ def test_html_to_text_strips_scripts_and_head() -> None:
 
 # --------------------------------------------------------------------------- fetch
 async def test_fetch_extracts_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_get(self, url):
-        return FakeResp(
+    _patch_stream(
+        monkeypatch,
+        lambda url: FakeStreamResp(
             headers={"content-type": "text/html; charset=utf-8"},
             content=b"<html><head><title>Doc</title></head><body><p>Alpha beta.</p></body></html>",
             url=url,
-        )
-
-    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+        ),
+    )
     connector = WebResearchConnector(CONNECTORS)
     result = await connector.execute("web.fetch", {"url": "http://93.184.216.34/doc"}, _ctx())
     assert result.ok
@@ -101,21 +129,24 @@ async def test_fetch_rejects_ssrf_target() -> None:
 
 async def test_fetch_revalidates_redirect_hop(monkeypatch: pytest.MonkeyPatch) -> None:
     """A public URL that 302-redirects to the metadata IP must be blocked on the next hop."""
-
-    async def fake_get(self, url):
-        return FakeResp(status=302, headers={"location": "http://169.254.169.254/"}, url=url)
-
-    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    _patch_stream(
+        monkeypatch,
+        lambda url: FakeStreamResp(
+            status=302, headers={"location": "http://169.254.169.254/"}, url=url
+        ),
+    )
     connector = WebResearchConnector(CONNECTORS)
     with pytest.raises(ConnectorError, match="private/internal"):
         await connector.execute("web.fetch", {"url": "http://93.184.216.34/redir"}, _ctx())
 
 
 async def test_fetch_rejects_binary_content(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_get(self, url):
-        return FakeResp(headers={"content-type": "image/png"}, content=b"\x89PNG\r\n", url=url)
-
-    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    _patch_stream(
+        monkeypatch,
+        lambda url: FakeStreamResp(
+            headers={"content-type": "image/png"}, content=b"\x89PNG", url=url
+        ),
+    )
     connector = WebResearchConnector(CONNECTORS)
     with pytest.raises(ConnectorError, match="non-text"):
         await connector.execute("web.fetch", {"url": "http://93.184.216.34/img"}, _ctx())

@@ -94,20 +94,20 @@ class MCPConnector(BaseConnector):
         super().__init__(manifest_dir)
         self.runtime_config: dict[str, Any] = {}
 
-    def _servers(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
-        # On the execution path, prefer THIS workspace's config (threaded in via ctx.config from
-        # the DB Connector row) over the global singleton's runtime_config, so a call never routes
-        # to another workspace's MCP server if it refreshed the singleton in between (R2-F8).
-        source = (
-            ctx.config
-            if ctx is not None and ctx.config.get("servers") is not None
-            else self.runtime_config
-        )
-        return [s for s in source.get("servers", []) if s.get("enabled", True)]
+    def _servers_in(self, config: dict[str, Any] | None) -> list[dict[str, Any]]:
+        # config=None → the process-global singleton; an explicit dict → THAT workspace's config
+        # verbatim. The gateway resolves a tool's manifest against the per-workspace config so a
+        # dynamic MCP tool's trust/risk/side-effect classification can't be spoofed by another
+        # workspace's singleton state (review R3-F2, R2-F8).
+        src = self.runtime_config if config is None else config
+        return [s for s in (src or {}).get("servers", []) if s.get("enabled", True)]
 
-    def list_tools(self) -> list[ToolManifest]:
+    def _servers(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
+        return self._servers_in((ctx.config or None) if ctx is not None else None)
+
+    def list_tools(self, config: dict[str, Any] | None = None) -> list[ToolManifest]:
         tools: list[ToolManifest] = []
-        for server in self._servers():
+        for server in self._servers_in(config):
             if server.get("transport") == "inproc":
                 for name, spec in INPROC_TOOLS.items():
                     tools.append(
@@ -133,8 +133,11 @@ class MCPConnector(BaseConnector):
                     )
         return tools
 
-    def get_tool(self, tool_id: str) -> ToolManifest | None:
-        return next((t for t in self.list_tools() if t.id == tool_id), None)
+    def get_tool(self, tool_id: str, config: dict[str, Any] | None = None) -> ToolManifest | None:
+        return next((t for t in self.list_tools(config) if t.id == tool_id), None)
+
+    def owns_tool(self, tool_id: str) -> bool:
+        return tool_id.startswith("mcp.")
 
     async def health_check(self, ctx: ExecutionContext) -> HealthStatus:
         servers = self._servers(ctx)

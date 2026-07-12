@@ -14,6 +14,7 @@ instructions. Degrades honestly:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -128,10 +129,30 @@ class ResearchRunExecutor(BaseSkillExecutor):
             body = body.strip()
             generation_mode = "llm_assisted"
 
+        # Deterministically validate citations: a memo may only cite [1..len(sources)]. A hostile
+        # fetched page can instruct the model to cite [999] to launder an unsupported claim into
+        # "Facts" — we detect out-of-range citations and surface them instead of trusting the
+        # generated text (review R3-F9).
+        cited = {int(n) for n in re.findall(r"\[(\d+)\]", body)}
+        invalid = sorted(n for n in cited if n < 1 or n > len(sources))
+        unresolved: list[str] = []
+        warning: list[str] = []
+        if invalid:
+            unresolved.append(
+                f"Memo cited non-existent source(s) {invalid}; only {len(sources)} were fetched — "
+                "treat those claims as unverified."
+            )
+            warning = [
+                "",
+                f"> ⚠️ Citation check: {len(invalid)} citation(s) reference no fetched source "
+                f"({invalid}). Those claims are not grounded in the sources below.",
+            ]
+
         md = [
             f"# Research memo: {question}",
             f"*Generated {now} · source-backed ({len(sources)} live source"
             f"{'s' if len(sources) != 1 else ''}) · verify time-sensitive claims*",
+            *warning,
             "",
             body,
             "",
@@ -140,8 +161,14 @@ class ResearchRunExecutor(BaseSkillExecutor):
         ]
         return SkillResult(
             summary_md=f"Research memo for “{question[:80]}” — {len(sources)} live source"
-            f"{'s' if len(sources) != 1 else ''} cited.",
-            data={"question": question, "mode": mode, "source_count": len(sources)},
+            f"{'s' if len(sources) != 1 else ''} cited"
+            f"{f' ({len(invalid)} invalid citation(s) flagged)' if invalid else ''}.",
+            data={
+                "question": question,
+                "mode": mode,
+                "source_count": len(sources),
+                "invalid_citations": invalid,
+            },
             artifacts=[
                 ArtifactSpec(
                     kind="markdown",
@@ -152,7 +179,7 @@ class ResearchRunExecutor(BaseSkillExecutor):
                 )
             ],
             sources=[{"label": s["title"], "reference": s["url"]} for s in sources],
-            unresolved=[],
+            unresolved=unresolved,
             generation_mode=generation_mode,
         )
 

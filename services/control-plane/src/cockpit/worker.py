@@ -233,18 +233,21 @@ class RunProcessor:
 
     async def _persist_result(self, session: AsyncSession, run: Run, result: SkillResult) -> None:
         # Idempotent across a crash/resume: a resumed run re-executes from the top and would
-        # otherwise insert a *second* set of artifact/memory rows (review R2-F10). Clear this
-        # run's prior artifacts and its still-proposed memories (+ sources) first, so the
-        # re-run replaces rather than duplicates. Already-approved memories are left untouched.
+        # otherwise insert a *second* set of artifact/memory rows (review R2-F10). Artifacts are
+        # cleared and rebuilt. For memories we key by logical identity (kind, content): a proposal
+        # already persisted in ANY status is left as-is, so a memory the user *approved* between
+        # the crash and the resume is never re-proposed as a duplicate (review R3-F8). Only stale
+        # still-proposed memories that this run no longer proposes are removed.
         await session.execute(delete(Artifact).where(Artifact.run_id == run.id))
-        stale_memories = (
-            await session.scalars(
-                select(Memory).where(Memory.run_id == run.id, Memory.status == "proposed")
-            )
+        existing_memories = (
+            await session.scalars(select(Memory).where(Memory.run_id == run.id))
         ).all()
-        for mem in stale_memories:
-            await session.execute(delete(MemorySource).where(MemorySource.memory_id == mem.id))
-            await session.delete(mem)
+        existing_keys = {(m.kind, m.content) for m in existing_memories}
+        proposed_keys = {(p.kind, p.content) for p in result.memory_proposals}
+        for mem in existing_memories:
+            if mem.status == "proposed" and (mem.kind, mem.content) not in proposed_keys:
+                await session.execute(delete(MemorySource).where(MemorySource.memory_id == mem.id))
+                await session.delete(mem)
         await session.flush()
 
         artifacts_meta = []
@@ -277,6 +280,8 @@ class RunProcessor:
             )
 
         for proposal in result.memory_proposals:
+            if (proposal.kind, proposal.content) in existing_keys:
+                continue  # already persisted on a prior attempt (proposed or reviewed) — R3-F8
             memory = Memory(
                 id=new_id("mem"),
                 workspace_id=run.workspace_id,
@@ -683,18 +688,16 @@ class RunProcessor:
 
 
 def claim_still_owned(run: Run | None, worker_id: str) -> bool:
-    """False if this run vanished or another worker owns its claim while it's still queued.
+    """True only if this worker still holds the claim exactly.
 
-    Called after a task acquires the worker semaphore, which it may have waited on: a re-queue
-    or another process's startup recovery could have cleared/reassigned the claim in between, and
-    re-executing then would double-run the pipeline (review R2-F11). A run past `queued` has
-    already been flipped under the semaphore by its owner, so status alone gates it there.
+    Called after a task acquires the worker semaphore, which it may have waited on. Requiring an
+    **exact** claim match (not `None`-is-ok, not status-gated) closes the multi-process races the
+    looser check missed (review R3-F13): another process's blanket startup recovery can clear the
+    claim to `None`, or reassign it, while this task waits — both must abort, not proceed. A task
+    only reaches here straight after `claim_next_run` set `worker_claim = worker_id`, so in the
+    single-process MVP the exact match always holds for legitimate work.
     """
-    if run is None:
-        return False
-    if run.status == RunStatus.QUEUED.value and run.worker_claim not in (worker_id, None):
-        return False
-    return True
+    return run is not None and run.worker_claim == worker_id
 
 
 async def claim_next_run(session: AsyncSession) -> Run | None:

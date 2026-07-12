@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cockpit.api.deps import get_session, get_workspace
 from cockpit.enums import ApprovalStatus, EventType, RunStatus, ToolCallStatus
 from cockpit.events import get_bus
-from cockpit.logging import redact
+from cockpit.logging import SENSITIVE_VALUE_RE
 from cockpit.models import Approval, Run, ToolCall, Workspace
 from cockpit.schemas import ApprovalOut, ApprovalResolveRequest
 from cockpit.state_machine import transition
@@ -92,11 +93,18 @@ async def resolve_approval(
         if body.decision == "approve":
             tool_call.status = ToolCallStatus.APPROVED.value
             if body.edited_input is not None:
-                # Redact before persisting, exactly like the original `input` — a secret must
-                # never land raw in the audit DB even via the edit path (review R2-F5). Tool
-                # input should carry secret *references*, not raw values, so redaction only
-                # masks credential-shaped values and leaves normal edits intact.
-                tool_call.edited_input = redact(body.edited_input)
+                # The edited input is the EXECUTABLE source of truth on resume, so it must be
+                # stored raw — persisting a redacted copy meant the run later wrote the literal
+                # mask to disk and reported success (review R3-F10). To still honor R2-F5 (no raw
+                # secret in the audit DB), reject credential-shaped input instead of masking it:
+                # tool input should carry secret *references*, not raw values.
+                if SENSITIVE_VALUE_RE.search(json.dumps(body.edited_input, default=str)):
+                    raise HTTPException(
+                        422,
+                        "That edited input looks like it contains a raw credential. Tool input "
+                        "must reference secrets by name, not embed their values.",
+                    )
+                tool_call.edited_input = body.edited_input
         else:
             tool_call.status = ToolCallStatus.DENIED.value
             tool_call.error = body.note or "You denied this action."

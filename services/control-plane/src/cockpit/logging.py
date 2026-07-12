@@ -22,11 +22,16 @@ SENSITIVE_VALUE_RE = re.compile(
     r"(sk-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{20,}|xox[bap]-[A-Za-z0-9-]{10,}"
     r"|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{16,})"
 )
+# Credentials embedded in a URL's userinfo (scheme://user:password@host) — regexes above key off
+# credential *shape* and miss an arbitrary password, so a `web.fetch` URL could persist one
+# (review R3-F5). Mask the whole userinfo, keeping scheme + host for audit legibility.
+URL_USERINFO_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/\s:@]+:[^/\s@]+@")
 
 MASK = "•••redacted•••"
 
 
 def redact_text(text: str) -> str:
+    text = URL_USERINFO_RE.sub(r"\1" + MASK + "@", text)
     return SENSITIVE_VALUE_RE.sub(MASK, text)
 
 

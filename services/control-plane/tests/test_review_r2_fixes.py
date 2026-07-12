@@ -172,24 +172,20 @@ def test_f4_symlinked_entry_inside_root_is_not_listed(workspace: dict, tmp_path:
     assert "leak.md" not in names  # symlink skipped (review R2-F4)
 
 
-# --------------------------------------------------------------------------- F5
-async def test_f5_edited_input_is_redacted_on_approval(workspace: dict) -> None:
-    """A secret typed into the approval-edit path must be redacted before it lands in the DB."""
-    from cockpit.api.approvals import resolve_approval
+# --------------------------------------------------------------------------- F5 (see R3-F10)
+async def _make_pending_approval(ws_id: str) -> tuple[str, str]:
     from cockpit.db import db_session
-    from cockpit.schemas import ApprovalResolveRequest
 
-    ws_id = workspace["workspace_id"]
     run = await _mkrun(ws_id, kind="chat")
     async with db_session() as session:
         tc = ToolCall(
             id=new_id("tc"),
             workspace_id=ws_id,
             run_id=run.id,
-            tool_id="n8n.deploy",
-            connector_slug="n8n",
+            tool_id="local_files.write",
+            connector_slug="local-files",
             status=ToolCallStatus.PROPOSED.value,
-            risk_level="R3",
+            risk_level="R2",
             idempotency_key=new_id("k"),
         )
         session.add(tc)
@@ -199,28 +195,59 @@ async def test_f5_edited_input_is_redacted_on_approval(workspace: dict) -> None:
             run_id=run.id,
             tool_call_id=tc.id,
             status="pending",
-            title="Deploy",
+            title="Write",
             confirm_phrase_required=False,
         )
         session.add(apr)
         await session.commit()
-        tc_id, apr_id = tc.id, apr.id
+        return tc.id, apr.id
 
+
+async def test_f5_edited_input_secret_rejected_normal_stored_raw(workspace: dict) -> None:
+    """Secret-shaped edited input is rejected (R2-F5); normal edits are stored RAW so the resume
+    executes the real value, not a redacted mask (R3-F10)."""
+    from fastapi import HTTPException
+
+    from cockpit.api.approvals import resolve_approval
+    from cockpit.db import db_session
+    from cockpit.schemas import ApprovalResolveRequest
+
+    ws_id = workspace["workspace_id"]
+
+    # 1) a raw credential in edited input is refused, never masked-and-executed
+    _, apr_id = await _make_pending_approval(ws_id)
+    async with db_session() as session:
+        ws = await session.get(Workspace, ws_id)
+        with pytest.raises(HTTPException) as exc:
+            await resolve_approval(
+                apr_id,
+                ApprovalResolveRequest(
+                    decision="approve",
+                    edited_input={"content": "Bearer ABCDEFGHIJKLMNOPQRSTUV", "path": "x.md"},
+                ),
+                ws,
+                session,
+            )
+        assert exc.value.status_code == 422
+
+    # 2) a normal edit is stored verbatim (the executable source of truth)
+    tc_id, apr_id = await _make_pending_approval(ws_id)
     async with db_session() as session:
         ws = await session.get(Workspace, ws_id)
         await resolve_approval(
             apr_id,
             ApprovalResolveRequest(
-                decision="approve",
-                edited_input={"api_key": "sk-live-ABCDEF1234567890", "path": "notes/x.md"},
+                decision="approve", edited_input={"content": "hello world", "path": "notes/x.md"}
             ),
             ws,
             session,
         )
     async with db_session() as session:
         tc = await session.get(ToolCall, tc_id)
-        assert tc.edited_input["api_key"] == "•••redacted•••"  # secret masked
-        assert tc.edited_input["path"] == "notes/x.md"  # normal edit preserved
+        assert tc.edited_input == {
+            "content": "hello world",
+            "path": "notes/x.md",
+        }  # raw, not masked
 
 
 # --------------------------------------------------------------------------- F6
@@ -381,12 +408,14 @@ def test_f11_claim_ownership_predicate() -> None:
     def run(status: str, claim: str | None) -> SimpleNamespace:
         return SimpleNamespace(status=status, worker_claim=claim)
 
+    # R3-F13 tightened this to EXACT ownership (worker_claim == worker_id) regardless of status:
+    # a cleared (None) or foreign claim must abort, not proceed.
     assert claim_still_owned(None, me) is False  # vanished
     assert claim_still_owned(run(RunStatus.QUEUED.value, "wrk-other"), me) is False  # stolen
     assert claim_still_owned(run(RunStatus.QUEUED.value, me), me) is True  # ours
-    assert claim_still_owned(run(RunStatus.QUEUED.value, None), me) is True  # unclaimed→process
-    # past `queued`: its owner already flipped status under the semaphore, so status gates it
-    assert claim_still_owned(run(RunStatus.EXECUTING.value, "wrk-other"), me) is True
+    assert claim_still_owned(run(RunStatus.QUEUED.value, None), me) is False  # cleared → abort
+    assert claim_still_owned(run(RunStatus.EXECUTING.value, "wrk-other"), me) is False  # foreign
+    assert claim_still_owned(run(RunStatus.EXECUTING.value, me), me) is True  # still ours
 
 
 # --------------------------------------------------------------------------- F12

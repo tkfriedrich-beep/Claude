@@ -50,6 +50,25 @@ def upgrade() -> None:
     # A fresh DB gets UNIQUE(run_id, seq) inline via create_all (SQLite backs it with an
     # autoindex), so _has_unique short-circuits; only an older DB needs this named index.
     if not _has_unique("run_events", ["run_id", "seq"]):
+        # A legacy 0002 DB may hold duplicate (run_id, seq) rows — exactly the state the pre-fix
+        # event race produced, i.e. the DBs that most need this migration. Creating the unique
+        # index directly would raise "UNIQUE constraint failed" and brick the upgrade
+        # (review R3-F11). Renumber the affected runs' events gap-free in stable (seq, id) order
+        # first, so every row becomes unique while preserving order, then build the index.
+        op.execute(
+            """
+            WITH renum AS (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY seq, id) AS rn
+                FROM run_events
+                WHERE run_id IN (
+                    SELECT run_id FROM run_events GROUP BY run_id, seq HAVING COUNT(*) > 1
+                )
+            )
+            UPDATE run_events
+               SET seq = (SELECT rn FROM renum WHERE renum.id = run_events.id)
+             WHERE id IN (SELECT id FROM renum)
+            """
+        )
         op.execute("CREATE UNIQUE INDEX uq_run_events_run_seq ON run_events (run_id, seq)")
 
 

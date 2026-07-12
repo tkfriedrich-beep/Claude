@@ -41,10 +41,14 @@ Scope: single-user, local-first MVP. Assets: the user's files (vault, bizideas),
   backup = file copy; protect the disk with FileVault or equivalent.
 - Microphone/voice: not implemented; the design reserves push-to-talk only. Never
   always-listening.
-- Web fetch (`web.fetch`) SSRF guard resolves the host and refuses private/loopback/link-local/
-  reserved/metadata addresses, and re-validates every redirect hop — but DNS **rebinding** between
-  that resolution and httpx's own connect is not closed in the MVP (would need pinning the
-  connection to the validated IP). Fetched content is always treated as untrusted data.
+- Web fetch (`web.fetch`) SSRF guard resolves the host, refuses private/loopback/link-local/
+  reserved/metadata addresses, re-validates every redirect hop, AND **pins the connection to the
+  validated IP** (Host + TLS SNI preserved), so DNS rebinding between validation and connect can no
+  longer reach a new internal address (ADR-017 F1). Fetched content is always treated as untrusted
+  data.
+- The worker is **single-process** in the MVP. Horizontal scaling needs a leased-claim protocol
+  (owner token + heartbeat expiry + atomic `queued→triaging`); until then `claim_still_owned`
+  requires exact ownership but a multi-process deployment is out of scope (ADR-004, ADR-017 F13).
 
 ## Security invariants (tested)
 
@@ -82,3 +86,25 @@ Each item has a regression test in `tests/test_review_r2_fixes.py`.
   artifacts and still-proposed memories rather than duplicating them (R2-F10); `UNIQUE(run_id,
   seq)` + a savepoint-retry in `emit()` make a duplicate event sequence number impossible
   (R2-F12).
+
+### Hardened by the round-3 adversarial review (`docs/reviews/codex-findings-r3.md`, ADR-017)
+
+Regression tests in `tests/test_review_r3_fixes.py` (F10/F13 in `tests/test_review_r2_fixes.py`).
+
+- **`web.fetch` pins the connection to the validated IP** (Host + SNI preserved) — DNS rebinding
+  can no longer reach an internal address after the guard passes (R3-F1).
+- **Policy, durability, and execution use the same per-workspace manifest.** A dynamic n8n/MCP tool
+  is resolved from the workspace's own `Connector.config`, so it cannot be policy-checked as another
+  workspace's "trusted read" while executing as a write — closing a Safe Mode bypass and a
+  double-fire (R3-F2).
+- **Filesystem writes descend with `O_NOFOLLOW` on every component**, rejecting a parent-directory
+  symlink swapped in after validation (R3-F3), in addition to final-component symlinks/hardlinks.
+- **Secrets can't leak through the web connector:** its API-key env var is fixed in code (no config
+  redirect — R3-F4), URL userinfo is rejected and redacted (R3-F5).
+- **Events publish only after the outer transaction commits** (transactional outbox), so a
+  rolled-back event never reaches SSE (R3-F7), and the seq-conflict retry no longer crashes (R3-F6).
+- **Research Run validates citations** — an out-of-range `[n]` from an injected page is flagged, not
+  presented as grounded (R3-F9).
+- **The approval edit executes the raw value** (credential-shaped edits are rejected, not masked and
+  written — R3-F10). **Migration 0003 reconciles legacy duplicate event seqs** before the unique
+  index (R3-F11). **Fetch is bounded** — streamed byte cap + linear HTML parser, no ReDoS (R3-F12).

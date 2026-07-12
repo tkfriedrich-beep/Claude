@@ -20,6 +20,8 @@ from cockpit.connectors.base import (
     contain_path,
     contain_write_target,
     is_within_roots,
+    open_contained_write,
+    relparts_under_roots,
     safe_glob_pattern,
 )
 from cockpit.enums import ConnectorHealthState
@@ -37,6 +39,21 @@ def _rel(path: Path, roots: list[Path]) -> str:
         except ValueError:
             continue
     return str(path)
+
+
+def _unified_diff(old_content: str, new_content: str, name: str) -> str:
+    return (
+        "\n".join(
+            difflib.unified_diff(
+                old_content.splitlines(),
+                new_content.splitlines(),
+                fromfile=f"a/{name}",
+                tofile=f"b/{name}",
+                lineterm="",
+            )
+        )
+        or "(new file)"
+    )
 
 
 class LocalFilesConnector(BaseConnector):
@@ -189,34 +206,34 @@ class LocalFilesConnector(BaseConnector):
 
     def _write(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
         assert not ctx.dry_run, "real write called for a dry-run — gateway routing bug"
-        path, new_content, diff = self._resolve_write(inp, ctx)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        raw = Path(inp["path"]).expanduser()
+        if fnmatch.fnmatch(raw.name, ".*"):
+            raise ConnectorError("Refusing to write hidden files.")
+        # Containment is enforced by DESCENT, not just a pre-check: resolve the logical path under
+        # a root (no symlink following), then open it component-by-component with O_NOFOLLOW from a
+        # root dir fd. A parent directory swapped to a symlink after this point is rejected at open
+        # time rather than followed out of the workspace (review R3-F3). st_nlink is checked before
+        # truncating so a rejected write does no damage (review R2-F3).
+        root, rel_parts = relparts_under_roots(raw, ctx.roots)
+        new_content: str = inp["content"]
         data = new_content.encode("utf-8")
-        # Open with O_NOFOLLOW so a symlink swapped into the final component after the
-        # containment check is rejected at open time (closes the TOCTOU), and refuse a
-        # hardlink to a file that may live outside the workspace (review R2-F3). Check
-        # st_nlink BEFORE truncating so a rejected write does no damage.
-        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-        try:
-            fd = os.open(path, flags, 0o644)
-        except OSError as exc:
-            raise ConnectorError(
-                f"Refusing to write “{path.name}” ({exc.strerror or exc}) — it may be a "
-                "symlink out of the workspace."
-            ) from exc
+        fd = open_contained_write(root, rel_parts)
         try:
             if os.fstat(fd).st_nlink > 1:
                 raise ConnectorError(
                     "Refusing to write a hardlinked file — it may share an inode with a "
                     "file outside the workspace."
                 )
+            old_content = os.read(fd, MAX_READ_BYTES).decode("utf-8", errors="replace")
+            diff = _unified_diff(old_content, new_content, raw.name)
             os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
             os.write(fd, data)
         finally:
             os.close(fd)
         return ToolResult(
             ok=True,
-            data={"path": str(path), "written": True, "diff": diff, "bytes": len(new_content)},
-            summary=f"Wrote {path.name} ({len(new_content)} bytes)",
+            data={"path": str(raw), "written": True, "diff": diff, "bytes": len(new_content)},
+            summary=f"Wrote {raw.name} ({len(new_content)} bytes)",
             external_confirmed=True,  # filesystem write verified by the write call itself
         )

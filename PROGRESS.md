@@ -19,7 +19,7 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · ❌ blocked
 
 | Gate | Result |
 | --- | --- |
-| `pytest` (control plane) | **87 passed** at MVP; **140 passed** after review rounds 1–2 + Web Research (see below) |
+| `pytest` (control plane) | **87 passed** at MVP; **155 passed** after review rounds 1–3 + Web Research (see below) |
 | `ruff check` + `ruff format --check` | clean |
 | `mypy src` | no issues in 52 files |
 | `pnpm typecheck` (web) | clean |
@@ -161,6 +161,35 @@ Test gate (all actually executed 2026-07-12): **pytest 140 passed** (+19 in
 binary rejection, offline + Firecrawl-mocked search, and full-pipeline source-backed/knowledge
 Research Run) · `ruff check` + `ruff format --check` clean · `mypy src` no issues in 53 files.
 Residual: DNS rebinding (THREAT_MODEL / connectors/web/README.md).
+
+## Post-MVP: adversarial review round 3 (2026-07-12)
+
+The third review (`docs/reviews/codex-findings-r3.md`) was the first the reviewer could **build and
+run** (it reported the baseline `140 passed`). It returned **13 findings** — 5 Critical — against
+the round-2 fixes and the new web-egress path. Each was re-verified against the on-branch code and
+fixed, with a regression test per finding (`tests/test_review_r3_fixes.py`, plus updated R2 cases
+for F10/F13). See DECISIONS ADR-017. Highlights, honestly including two regressions from round 2:
+
+- **F1** `web.fetch` now **pins the connection to the validated IP** (Host + SNI preserved), closing
+  the DNS-rebinding SSRF that was a documented residual. Verified: httpcore connects to the pinned
+  IP and still verifies the cert against the hostname; a live pinned HTTPS fetch works.
+- **F2** per-workspace manifest resolution — policy/durability/execution all use the workspace's own
+  `Connector.config`, closing a Safe Mode bypass + double-fire for a dynamic n8n/MCP tool.
+- **F3** writes descend with `O_NOFOLLOW` per component (parent-symlink TOCTOU). **F4** the web
+  secret env var is fixed in code (no config redirect → no `ANTHROPIC_API_KEY` exfil). **F5** URL
+  userinfo rejected + redacted.
+- **F6** (regression) the event-seq retry no longer crashes on `expunge`; **F7** events publish only
+  after commit (transactional outbox). **F8** approved-then-resumed memories aren't duplicated.
+  **F9** out-of-range citations are flagged. **F10** (regression) the approval edit executes the raw
+  value, not the redacted mask. **F11** migration 0003 reconciles legacy duplicate event seqs
+  (verified on a real 0002 DB). **F12** streamed byte cap + linear HTML parser (no ReDoS).
+  **F13** exact claim ownership.
+
+Test gate (all actually executed 2026-07-12): **pytest 155 passed** (+15 in
+`tests/test_review_r3_fixes.py`) · `ruff check` + `ruff format --check` clean · `mypy src` no issues
+in 53 files · `pnpm typecheck` + `pnpm lint` clean · `vitest` 6 passed · migration `0003` verified
+up/down/up **and** on a hand-built legacy-duplicate 0002 DB. Live in-container: IP-pinned fetch, SSRF
+rebinding rejection, and the parent-symlink write block all confirmed.
 
 ## Known limitations (honest)
 

@@ -94,12 +94,43 @@ class ToolGateway:
         self.bus = bus
         self.connectors = connectors
 
-    def find_tool(self, tool_id: str) -> tuple[BaseConnector, ToolManifest]:
+    def _connector_for_tool(self, tool_id: str) -> BaseConnector:
+        """Identify the owning connector WITHOUT a workspace config (config-independent), so the
+        choice can't be swayed by another workspace's singleton state (review R3-F2)."""
         for connector in self.connectors.values():
-            tool = connector.get_tool(tool_id)
-            if tool is not None:
-                return connector, tool
+            if connector.owns_tool(tool_id):
+                return connector
         raise ToolDenied(f"Unknown tool “{tool_id}” — not in any connector manifest.")
+
+    def find_tool(self, tool_id: str) -> tuple[BaseConnector, ToolManifest]:
+        """Singleton-config lookup — for best-effort heuristics only (e.g. verification). The
+        authoritative, per-workspace resolution is `_resolve_tool()`."""
+        connector = self._connector_for_tool(tool_id)
+        tool = connector.get_tool(tool_id)
+        if tool is None:
+            raise ToolDenied(f"Unknown tool “{tool_id}” — not in any connector manifest.")
+        return connector, tool
+
+    async def _resolve_tool(
+        self, session: AsyncSession, run: Run, tool_id: str
+    ) -> tuple[BaseConnector, ToolManifest, Connector | None]:
+        """Resolve a tool's manifest from THIS workspace's connector config, not the process-global
+        singleton — so a dynamic (n8n/MCP) tool's trust/risk/side-effect classification used for
+        policy, durability, and execution all describe the same capability (review R3-F2)."""
+        connector = self._connector_for_tool(tool_id)
+        connector_row = await session.scalar(
+            select(Connector).where(
+                Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
+            )
+        )
+        config = connector_row.config if connector_row is not None else None
+        tool = connector.get_tool(tool_id, config=config)
+        if tool is None:
+            raise ToolDenied(
+                f"Tool “{tool_id}” is not configured for this workspace’s "
+                f"{connector.slug} connector."
+            )
+        return connector, tool, connector_row
 
     async def _policy_context(self, session: AsyncSession, run: Run) -> PolicyContext:
         from cockpit.workspace import get_workspace_settings  # avoid cycle
@@ -164,18 +195,20 @@ class ToolGateway:
         )
 
     async def _decide(
-        self, session: AsyncSession, run: Run, tool_id: str, tool_input: dict[str, Any]
-    ) -> tuple[BaseConnector, ToolManifest, Connector | None, Decision]:
-        """Resolve tool + evaluate policy (incl. manifest approval-tightening). No writes."""
+        self,
+        session: AsyncSession,
+        run: Run,
+        connector: BaseConnector,
+        tool: ToolManifest,
+        connector_row: Connector | None,
+        tool_input: dict[str, Any],
+    ) -> Decision:
+        """Evaluate policy (incl. manifest approval-tightening) for an already-resolved tool. No
+        writes. The caller must pass the per-workspace manifest from `_resolve_tool` (review
+        R3-F2)."""
         import dataclasses
 
-        connector, tool = self.find_tool(tool_id)
-        connector_row = await session.scalar(
-            select(Connector).where(
-                Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
-            )
-        )
-        _validate(tool.input_schema, tool_input, f"{tool_id} input")
+        _validate(tool.input_schema, tool_input, f"{tool.id} input")
         base_ctx = await self._policy_context(session, run)
         ctx = dataclasses.replace(
             base_ctx,
@@ -206,7 +239,7 @@ class ToolGateway:
                 "This tool always requires your approval before writing.",
                 decision.risk_level,
             )
-        return connector, tool, connector_row, decision
+        return decision
 
     async def preflight(
         self, session: AsyncSession, run: Run, tool_id: str, tool_input: dict[str, Any]
@@ -217,8 +250,8 @@ class ToolGateway:
         then have to roll back — a rollback after an emit leaves ghost SSE events (review
         R2-F9). Raises ToolDenied for an unknown tool and SchemaViolation for bad input.
         """
-        _, _, _, decision = await self._decide(session, run, tool_id, tool_input)
-        return decision
+        connector, tool, connector_row = await self._resolve_tool(session, run, tool_id)
+        return await self._decide(session, run, connector, tool, connector_row, tool_input)
 
     async def call_tool(
         self,
@@ -232,7 +265,10 @@ class ToolGateway:
         preview: str | None = None,
     ) -> ToolResult:
         """The one entry point for tool execution. May raise ToolDenied / ApprovalPending."""
-        connector, tool = self.find_tool(tool_id)
+        # Per-workspace manifest — every check below (replay/RUNNING durability, policy, execution)
+        # must agree on the tool's real classification, so resolve it once from THIS workspace's
+        # config rather than the singleton (review R3-F2).
+        connector, tool, connector_row = await self._resolve_tool(session, run, tool_id)
 
         key = idempotency_key(run.id, tool_id, tool_input)
         existing = await session.scalar(
@@ -282,9 +318,7 @@ class ToolGateway:
             )
             raise ToolDenied(existing.error, decision=None)
 
-        connector, tool, _connector_row, decision = await self._decide(
-            session, run, tool_id, tool_input
-        )
+        decision = await self._decide(session, run, connector, tool, connector_row, tool_input)
 
         if existing is None:
             existing = ToolCall(
@@ -475,7 +509,14 @@ class ToolGateway:
                 Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
             )
         )
-        config: dict[str, Any] = dict(row.config) if row is not None else {}
+        # When the workspace has a Connector row, its config is AUTHORITATIVE — never fall back to
+        # the singleton's runtime_config, or an empty-config workspace would execute against another
+        # workspace's endpoint that last refreshed the singleton (review R3-F2). Only a missing row
+        # (connector not synced) falls back.
+        if row is not None:
+            config = dict(row.config)
+        else:
+            config = dict(getattr(connector, "runtime_config", {}) or {})
         try:
             ws = await get_workspace_settings(session, run.workspace_id)
             if ws.vault_path or ws.demo_mode:
@@ -492,7 +533,7 @@ class ToolGateway:
             correlation_id=run.correlation_id or "",
             dry_run=dry_run,
             roots=await allowed_roots_for(run.workspace_id),
-            config=config or getattr(connector, "runtime_config", {}) or {},
+            config=config,
             settings=self.settings,
         )
         # A dry-run goes to the connector's dedicated preview() method, never to execute()

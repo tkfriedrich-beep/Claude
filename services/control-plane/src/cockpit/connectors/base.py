@@ -115,11 +115,20 @@ class BaseConnector(ABC):
     def get_manifest(self) -> ConnectorManifest:
         return self._manifest
 
-    def list_tools(self) -> list[ToolManifest]:
+    def list_tools(self, config: dict[str, Any] | None = None) -> list[ToolManifest]:
+        # `config` lets the gateway resolve a tool manifest from a *specific workspace's* connector
+        # config instead of the process-global singleton (review R3-F2). Static connectors ignore
+        # it (their manifest is code-defined); dynamic connectors (n8n/mcp) override this.
         return list(self._manifest.tools)
 
-    def get_tool(self, tool_id: str) -> ToolManifest | None:
-        return next((t for t in self._manifest.tools if t.id == tool_id), None)
+    def get_tool(self, tool_id: str, config: dict[str, Any] | None = None) -> ToolManifest | None:
+        return next((t for t in self.list_tools(config) if t.id == tool_id), None)
+
+    def owns_tool(self, tool_id: str) -> bool:
+        """True if this connector defines `tool_id` — used to pick the connector *before* a
+        workspace config is loaded. Config-independent so it can't be spoofed by another
+        workspace's singleton state (review R3-F2)."""
+        return self.get_tool(tool_id) is not None
 
     @abstractmethod
     async def health_check(self, ctx: ExecutionContext) -> HealthStatus: ...
@@ -195,6 +204,70 @@ def safe_glob_pattern(pattern: str) -> str:
     if pattern.startswith("/") or ".." in parts or ".." in pattern.split("\\"):
         raise ConnectorError(f"Unsafe glob pattern “{pattern}” — no absolute paths or “..”.")
     return pattern
+
+
+def relparts_under_roots(candidate: str | Path, roots: list[Path]) -> tuple[Path, list[str]]:
+    """Return (resolved_root, relative-parts) for a *logical* path under a root, without following
+    any symlink in the candidate. Rejects `..` and paths outside every root. Raises ConnectorError.
+
+    Unlike `contain_write_target` (which realpath-resolves the parent), this keeps the path
+    logical so the caller can walk it component-by-component with O_NOFOLLOW (review R3-F3)."""
+    raw = Path(candidate).expanduser()
+    if ".." in raw.parts:
+        raise ConnectorError(f"Refusing a path containing “..” — “{candidate}”.")
+    for root in roots:
+        root_abs = root.resolve()  # resolving the trusted root itself is fine
+        base = raw if raw.is_absolute() else root_abs / raw
+        try:
+            rel = Path(os.path.normpath(base)).relative_to(root_abs)
+        except ValueError:
+            continue
+        if ".." in rel.parts or rel == Path("."):
+            continue
+        return root_abs, list(rel.parts)
+    raise ConnectorError(
+        f"Path “{candidate}” is outside the configured roots — refusing to touch it."
+    )
+
+
+def open_contained_write(root: Path, rel_parts: list[str]) -> int:
+    """Open `root/<rel_parts>` for read+write, descending from a root dir fd with O_NOFOLLOW on
+    EVERY component. A symlink swapped into any parent between validation and open (a TOCTOU race)
+    is rejected at open time, not followed — closing the parent-symlink escape (review R3-F3).
+
+    Returns a file descriptor the caller must close. Missing intermediate directories are created
+    safely via mkdirat. Raises ConnectorError on any symlink/He escape or bad component."""
+    o_dir = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+    dir_fd = os.open(root, o_dir)  # root itself is trusted config
+    try:
+        for part in rel_parts[:-1]:
+            if part in ("", ".", ".."):
+                raise ConnectorError(f"Refusing unsafe path component “{part}”.")
+            try:
+                nxt = os.open(part, o_dir | os.O_NOFOLLOW, dir_fd=dir_fd)
+            except FileNotFoundError:
+                os.mkdir(part, 0o755, dir_fd=dir_fd)
+                nxt = os.open(part, o_dir | os.O_NOFOLLOW, dir_fd=dir_fd)
+            except OSError as exc:
+                raise ConnectorError(
+                    f"Refusing to descend through “{part}” ({exc.strerror or exc}) — "
+                    "it may be a symlink out of the workspace."
+                ) from exc
+            os.close(dir_fd)
+            dir_fd = nxt
+        name = rel_parts[-1]
+        if name in ("", ".", ".."):
+            raise ConnectorError(f"Refusing to write to “{name}” — invalid file name.")
+        flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            return os.open(name, flags, 0o644, dir_fd=dir_fd)
+        except OSError as exc:
+            raise ConnectorError(
+                f"Refusing to write “{name}” ({exc.strerror or exc}) — it may be a symlink "
+                "out of the workspace."
+            ) from exc
+    finally:
+        os.close(dir_fd)
 
 
 def contain_write_target(candidate: str | Path, roots: list[Path]) -> Path:
