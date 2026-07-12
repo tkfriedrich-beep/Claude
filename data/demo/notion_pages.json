@@ -1,0 +1,7 @@
+{
+  "demo": true,
+  "pages": [
+    { "id": "demo-page-1", "title": "Client portal — Nordwind (draft)", "last_edited": "2026-07-08T11:00:00Z", "demo": true },
+    { "id": "demo-page-2", "title": "Content calendar H2", "last_edited": "2026-07-05T09:30:00Z", "demo": true }
+  ]
+}

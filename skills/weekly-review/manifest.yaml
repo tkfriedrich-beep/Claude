@@ -1,0 +1,26 @@
+id: weekly-review
+name: Weekly Review
+description: Wins, commitments, slippage, decisions, lessons, and next-week focus — from your actual run history, commitments, and note activity.
+version: 0.1.0
+domains: [today, work, personal]
+risk_level: R0
+default_autonomy: 3
+required_connectors: [obsidian]
+allowed_tools:
+  - obsidian.recent_changes
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 90
+max_steps: 10
+verification_rules:
+  - artifact_exists:markdown
+input_schema:
+  type: object
+  properties: {}
+  additionalProperties: false
+output_schema:
+  type: object
+  properties:
+    wins: { type: array }
+    slipped: { type: array }
+  required: [wins, slipped]

@@ -1,0 +1,17 @@
+id: decision-memo
+name: Decision Memo
+description: Turn a decision into a Judgment-OS memo — options, evidence, assumptions, trade-offs, recommendation, pre-mortem, review date — exported as Markdown + JSON.
+version: 0.1.0
+domains: [work, ventures, personal]
+risk_level: R2
+default_autonomy: 3
+required_connectors: []
+allowed_tools: []
+supports_schedule: false
+supports_dry_run: true
+timeout_seconds: 180
+max_steps: 5
+verification_rules:
+  - artifact_exists:markdown
+  - artifact_exists:json
+  - output_schema_valid

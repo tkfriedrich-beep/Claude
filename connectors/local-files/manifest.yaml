@@ -1,0 +1,93 @@
+id: local-files
+name: Local Files
+version: 0.1.0
+category: local
+description: Read and (with approval) write text files inside configured roots only.
+auth_type: none
+capabilities: [files.read, files.search, files.write]
+data_sensitivity: normal
+default_mode: read_write
+tools:
+  - id: local_files.list
+    name: List files
+    description: List files under an allowed root
+    capability: files.read
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        root: { type: string, description: "Directory inside an allowed root" }
+        glob: { type: string, default: "**/*" }
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        entries: { type: array }
+        truncated: { type: boolean }
+      required: [entries]
+    timeout_seconds: 15
+  - id: local_files.read
+    name: Read file
+    description: Read one text file (md/txt/json/yaml/csv)
+    capability: files.read
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        path: { type: string }
+      required: [path]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        path: { type: string }
+        content: { type: string }
+      required: [path, content]
+    timeout_seconds: 15
+  - id: local_files.search
+    name: Search files
+    description: Case-insensitive text search across files under a root
+    capability: files.search
+    access: read
+    risk_level: R0
+    input_schema:
+      type: object
+      properties:
+        query: { type: string, minLength: 1 }
+        root: { type: string }
+      required: [query]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        matches: { type: array }
+      required: [matches]
+    timeout_seconds: 20
+  - id: local_files.write
+    name: Write file
+    description: Create or overwrite a text file inside an allowed root (shows a diff first)
+    capability: files.write
+    access: write
+    risk_level: R2
+    external_side_effects: false
+    supports_dry_run: true
+    idempotent: true
+    approval: required          # Local Files writes always ask (BUILD_BRIEF §connectors)
+    undo_strategy: "Previous content is shown in the diff; restore by re-writing it."
+    input_schema:
+      type: object
+      properties:
+        path: { type: string }
+        content: { type: string }
+      required: [path, content]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        path: { type: string }
+        written: { type: boolean }
+        diff: { type: string }
+      required: [path, written]
+    timeout_seconds: 15

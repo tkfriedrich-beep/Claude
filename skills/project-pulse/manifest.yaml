@@ -1,0 +1,20 @@
+id: project-pulse
+name: Project Pulse
+description: Scan your project notes and report movement, risks, blocked items, and next actions — every claim source-linked.
+version: 0.1.0
+domains: [work, ventures]
+risk_level: R0
+default_autonomy: 3
+required_connectors: [obsidian]
+allowed_tools:
+  - obsidian.list_notes
+  - obsidian.read_note
+  - obsidian.recent_changes
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 120
+max_steps: 25
+verification_rules:
+  - artifact_exists:markdown
+  - sources_nonempty
+  - output_schema_valid

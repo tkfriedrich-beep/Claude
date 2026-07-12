@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "decision": { "type": "string", "minLength": 3 },
+    "context": { "type": "string" },
+    "options": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "anyOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "notes": { "type": "string" },
+              "evidence": { "type": "string" },
+              "tradeoffs": { "type": "string" }
+            },
+            "required": ["name"]
+          }
+        ]
+      }
+    },
+    "criteria": { "type": "array", "items": { "type": "string" } },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "deadline": { "type": "string" }
+  },
+  "required": ["decision", "options"]
+}

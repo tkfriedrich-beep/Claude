@@ -1,0 +1,72 @@
+id: web
+name: Web Research
+version: 0.1.0
+category: knowledge
+description: >
+  Read-only web access for research: search the web and fetch a page as clean text. Search is
+  Firecrawl-backed when FIRECRAWL_API_KEY is set, with an offline demo fallback; fetch works
+  keyless via a direct request guarded against SSRF (private/loopback/link-local hosts are
+  refused). Retrieved content is treated as untrusted data, never instructions.
+auth_type: api_key_env
+capabilities: [web.search, web.fetch]
+data_sensitivity: normal
+default_mode: read_only
+tools:
+  - id: web.search
+    name: Web search
+    description: Search the web and return ranked results (title, url, snippet).
+    capability: web.search
+    access: read
+    risk_level: R1
+    external_side_effects: false   # a read; it sends a query out but mutates nothing
+    idempotent: true
+    supports_dry_run: false
+    timeout_seconds: 30
+    input_schema:
+      type: object
+      properties:
+        query: { type: string, minLength: 2 }
+        limit: { type: integer, minimum: 1, maximum: 10, default: 5 }
+      required: [query]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              url: { type: string }
+              snippet: { type: string }
+            required: [url]
+        provider: { type: string }
+        demo: { type: boolean }
+      required: [results]
+  - id: web.fetch
+    name: Fetch page
+    description: Fetch one public http(s) URL and return its readable text (SSRF-guarded).
+    capability: web.fetch
+    access: read
+    risk_level: R1
+    external_side_effects: false
+    idempotent: true
+    supports_dry_run: false
+    timeout_seconds: 30
+    input_schema:
+      type: object
+      properties:
+        url: { type: string, minLength: 8 }
+        max_chars: { type: integer, minimum: 500, maximum: 40000, default: 8000 }
+      required: [url]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        url: { type: string }
+        title: { type: string }
+        content: { type: string }
+        truncated: { type: boolean }
+        provider: { type: string }
+      required: [url, content]

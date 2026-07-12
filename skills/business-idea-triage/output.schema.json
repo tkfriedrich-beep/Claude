@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "ideas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "file": { "type": "string" },
+          "scores": { "type": "object" },
+          "total": { "type": "number" },
+          "verdict": { "type": "string", "enum": ["pursue", "explore", "park"] },
+          "next_validation_action": { "type": "string" }
+        },
+        "required": ["name", "file", "total", "verdict", "next_validation_action"]
+      }
+    },
+    "writebacks": { "type": "array" },
+    "root": { "type": "string" }
+  },
+  "required": ["ideas"]
+}

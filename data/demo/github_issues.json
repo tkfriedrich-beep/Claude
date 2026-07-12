@@ -1,0 +1,7 @@
+{
+  "demo": true,
+  "issues": [
+    { "id": 101, "repo": "acme/website", "title": "Hero CLS regression on mobile", "state": "open", "demo": true },
+    { "id": 102, "repo": "acme/website", "title": "Add case-study template", "state": "open", "demo": true }
+  ]
+}

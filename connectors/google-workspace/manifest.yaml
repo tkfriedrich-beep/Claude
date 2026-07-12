@@ -1,0 +1,70 @@
+id: google-workspace
+name: Google Workspace
+version: 0.1.0
+category: productivity
+description: >
+  Gmail, Calendar, and Drive. MOCK in the MVP — data returned is clearly-labeled demo data
+  until a real Google account is connected (production OAuth is on the roadmap).
+auth_type: oauth (not configured — mock)
+capabilities: [calendar.read, calendar.write, gmail.read]
+data_sensitivity: high
+default_mode: read_only
+mock: true
+tools:
+  - id: google.calendar.list_events
+    name: List calendar events
+    description: Today's and upcoming events (demo data while mocked)
+    capability: calendar.read
+    access: read
+    risk_level: R1
+    input_schema:
+      type: object
+      properties:
+        date: { type: string, description: "ISO date; defaults to today" }
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { events: { type: array }, demo: { type: boolean } }
+      required: [events]
+    timeout_seconds: 15
+  - id: google.calendar.create_event
+    name: Create calendar event
+    description: Create an event (external write — approval required; demo backend while mocked)
+    capability: calendar.write
+    access: write
+    risk_level: R3
+    external_side_effects: true
+    supports_dry_run: true
+    idempotent: false
+    approval: required
+    undo_strategy: "Delete the created event."
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        start: { type: string }
+        end: { type: string }
+        notes: { type: string }
+      required: [title, start, end]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { created: { type: boolean }, event: { type: object }, demo: { type: boolean } }
+      required: [created]
+    timeout_seconds: 20
+  - id: google.gmail.search
+    name: Search email
+    description: Search messages (demo data while mocked)
+    capability: gmail.read
+    access: read
+    risk_level: R1
+    sensitivity: high
+    input_schema:
+      type: object
+      properties: { query: { type: string } }
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties: { messages: { type: array }, demo: { type: boolean } }
+      required: [messages]
+    timeout_seconds: 15

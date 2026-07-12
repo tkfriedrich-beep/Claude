@@ -1,0 +1,26 @@
+id: daily-plan
+name: Daily Plan
+description: A realistic priority sequence and time blocks around your fixed events. Calendar changes remain drafts until approved.
+version: 0.1.0
+domains: [today]
+risk_level: R2
+default_autonomy: 3
+required_connectors: [google-workspace]
+allowed_tools:
+  - google.calendar.list_events
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 90
+max_steps: 10
+verification_rules:
+  - artifact_exists:markdown
+input_schema:
+  type: object
+  properties: {}
+  additionalProperties: false
+output_schema:
+  type: object
+  properties:
+    blocks: { type: array }
+    agenda_is_demo: { type: boolean }
+  required: [blocks]

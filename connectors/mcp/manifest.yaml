@@ -1,0 +1,13 @@
+id: mcp
+name: MCP Servers
+version: 0.1.0
+category: integration
+description: >
+  Registry of trusted Model Context Protocol servers. Discovered tools are normalized into the
+  cockpit's tool manifest and governed by local policy (reads R1 auto, writes R3 + approval by
+  default). MCP output is treated as untrusted data, never as instructions.
+auth_type: per_server
+capabilities: [mcp.discover, mcp.invoke]
+data_sensitivity: normal
+default_mode: read_write
+tools: []   # discovered per registered server

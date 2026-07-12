@@ -1,0 +1,27 @@
+id: commitment-sweep
+name: Commitment Sweep
+description: Find promises, follow-ups, and open TODOs in your notes and propose them as commitments — via the Memory Review queue, never auto-saved.
+version: 0.1.0
+domains: [today, people, work]
+risk_level: R0
+default_autonomy: 2
+required_connectors: [obsidian]
+allowed_tools:
+  - obsidian.search_notes
+  - obsidian.read_note
+supports_schedule: true
+supports_dry_run: true
+timeout_seconds: 120
+max_steps: 15
+verification_rules:
+  - artifact_exists:markdown
+  - output_schema_valid
+input_schema:
+  type: object
+  properties: {}
+  additionalProperties: false
+output_schema:
+  type: object
+  properties:
+    candidates: { type: array }
+  required: [candidates]

@@ -1,0 +1,10 @@
+{
+  "demo": true,
+  "note": "Demo calendar data — replaced by real events when Google Workspace is connected.",
+  "events": [
+    { "id": "demo-evt-1", "title": "Deep work: Nordwind pilot scope", "start": "2026-07-12T08:30:00Z", "end": "2026-07-12T10:00:00Z", "demo": true },
+    { "id": "demo-evt-2", "title": "Maya — homepage copy review", "start": "2026-07-12T12:00:00Z", "end": "2026-07-12T12:30:00Z", "demo": true },
+    { "id": "demo-evt-3", "title": "Electrician call — studio circuit", "start": "2026-07-12T15:00:00Z", "end": "2026-07-12T15:20:00Z", "demo": true },
+    { "id": "demo-evt-4", "title": "Gym", "start": "2026-07-12T17:30:00Z", "end": "2026-07-12T18:30:00Z", "demo": true }
+  ]
+}
