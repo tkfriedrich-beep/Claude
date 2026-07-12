@@ -42,7 +42,7 @@ from cockpit.enums import (
 )
 from cockpit.events import EventBus
 from cockpit.ids import new_id
-from cockpit.logging import get_logger, redact
+from cockpit.logging import get_logger, redact, redact_text
 from cockpit.models import Approval, Connector, Domain, PolicyRule, Run, Skill, ToolCall
 from cockpit.policy import Decision, Outcome, PolicyContext, Rule, ToolSpec, evaluate
 
@@ -163,6 +163,63 @@ class ToolGateway:
             rules=rules,
         )
 
+    async def _decide(
+        self, session: AsyncSession, run: Run, tool_id: str, tool_input: dict[str, Any]
+    ) -> tuple[BaseConnector, ToolManifest, Connector | None, Decision]:
+        """Resolve tool + evaluate policy (incl. manifest approval-tightening). No writes."""
+        import dataclasses
+
+        connector, tool = self.find_tool(tool_id)
+        connector_row = await session.scalar(
+            select(Connector).where(
+                Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
+            )
+        )
+        _validate(tool.input_schema, tool_input, f"{tool_id} input")
+        base_ctx = await self._policy_context(session, run)
+        ctx = dataclasses.replace(
+            base_ctx,
+            connector_enabled=bool(connector_row and connector_row.enabled),
+            connector_mode=ConnectorMode(connector_row.mode)
+            if connector_row
+            else ConnectorMode.READ_ONLY,
+        )
+        spec = ToolSpec(
+            tool_id=tool.id,
+            connector_slug=connector.slug,
+            access=tool.access,
+            risk_level=tool.risk_level,
+            external_side_effects=tool.external_side_effects,
+            supports_dry_run=tool.supports_dry_run,
+            idempotent=tool.idempotent,
+            trusted=tool.trusted,
+        )
+        decision = evaluate(spec, ctx)
+        if (
+            decision.outcome is Outcome.ALLOW
+            and tool.approval == "required"
+            and spec.access.value != "read"
+            and not decision.forced_dry_run
+        ):
+            decision = Decision(
+                Outcome.REQUIRE_APPROVAL,
+                "This tool always requires your approval before writing.",
+                decision.risk_level,
+            )
+        return connector, tool, connector_row, decision
+
+    async def preflight(
+        self, session: AsyncSession, run: Run, tool_id: str, tool_input: dict[str, Any]
+    ) -> Decision:
+        """Read-only policy decision — creates no ToolCall, Approval, or events.
+
+        For callers (live chat) that must decide WITHOUT persisting/publishing state they would
+        then have to roll back — a rollback after an emit leaves ghost SSE events (review
+        R2-F9). Raises ToolDenied for an unknown tool and SchemaViolation for bad input.
+        """
+        _, _, _, decision = await self._decide(session, run, tool_id, tool_input)
+        return decision
+
     async def call_tool(
         self,
         session: AsyncSession,
@@ -176,12 +233,6 @@ class ToolGateway:
     ) -> ToolResult:
         """The one entry point for tool execution. May raise ToolDenied / ApprovalPending."""
         connector, tool = self.find_tool(tool_id)
-        connector_row = await session.scalar(
-            select(Connector).where(
-                Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
-            )
-        )
-        _validate(tool.input_schema, tool_input, f"{tool_id} input")
 
         key = idempotency_key(run.id, tool_id, tool_input)
         existing = await session.scalar(
@@ -231,39 +282,9 @@ class ToolGateway:
             )
             raise ToolDenied(existing.error, decision=None)
 
-        import dataclasses
-
-        base_ctx = await self._policy_context(session, run)
-        ctx = dataclasses.replace(
-            base_ctx,
-            connector_enabled=bool(connector_row and connector_row.enabled),
-            connector_mode=ConnectorMode(connector_row.mode)
-            if connector_row
-            else ConnectorMode.READ_ONLY,
+        connector, tool, _connector_row, decision = await self._decide(
+            session, run, tool_id, tool_input
         )
-        spec = ToolSpec(
-            tool_id=tool.id,
-            connector_slug=connector.slug,
-            access=tool.access,
-            risk_level=tool.risk_level,
-            external_side_effects=tool.external_side_effects,
-            supports_dry_run=tool.supports_dry_run,
-            idempotent=tool.idempotent,
-            trusted=tool.trusted,
-        )
-        decision = evaluate(spec, ctx)
-        # Manifest-level "approval: required" tightens (never loosens) the policy result.
-        if (
-            decision.outcome is Outcome.ALLOW
-            and tool.approval == "required"
-            and spec.access.value != "read"
-            and not decision.forced_dry_run
-        ):
-            decision = Decision(
-                Outcome.REQUIRE_APPROVAL,
-                "This tool always requires your approval before writing.",
-                decision.risk_level,
-            )
 
         if existing is None:
             existing = ToolCall(
@@ -385,10 +406,14 @@ class ToolGateway:
         if diff_preview is None and tool.supports_dry_run:
             # Dry-run is side-effect free by contract: run it to show an honest preview.
             try:
-                dry = await self._run_connector(connector, tool, tool_input, run, dry_run=True)
+                dry = await self._run_connector(
+                    session, connector, tool, tool_input, run, dry_run=True
+                )
                 diff_preview = dry.data.get("diff") or dry.summary or None
             except Exception as exc:  # preview failure must not block the approval card
-                diff_preview = f"(preview unavailable: {exc})"
+                # Connector error text may echo request/response bodies with credentials —
+                # redact before it lands in the approval row / API response (review R2-F5).
+                diff_preview = f"(preview unavailable: {redact_text(str(exc))})"
 
         approval = Approval(
             id=new_id("apr"),
@@ -431,6 +456,7 @@ class ToolGateway:
 
     async def _run_connector(
         self,
+        session: AsyncSession,
         connector: BaseConnector,
         tool: ToolManifest,
         tool_input: dict[str, Any],
@@ -438,7 +464,27 @@ class ToolGateway:
         *,
         dry_run: bool,
     ) -> ToolResult:
-        from cockpit.workspace import allowed_roots_for  # avoid cycle
+        from cockpit.workspace import allowed_roots_for, get_workspace_settings  # avoid cycle
+
+        # Load THIS workspace's connector config from the DB (not the global singleton's
+        # runtime_config) so an execution routes to the right workspace's endpoint even if
+        # another workspace refreshed the singleton in between (review R2-F8). vault_path comes
+        # from the workspace's own settings.
+        row = await session.scalar(
+            select(Connector).where(
+                Connector.workspace_id == run.workspace_id, Connector.slug == connector.slug
+            )
+        )
+        config: dict[str, Any] = dict(row.config) if row is not None else {}
+        try:
+            ws = await get_workspace_settings(session, run.workspace_id)
+            if ws.vault_path or ws.demo_mode:
+                config.setdefault(
+                    "vault_path",
+                    ws.vault_path or str(self.settings.demo_dir / "vault"),
+                )
+        except ValueError:
+            pass
 
         exec_ctx = ExecutionContext(
             workspace_id=run.workspace_id,
@@ -446,7 +492,7 @@ class ToolGateway:
             correlation_id=run.correlation_id or "",
             dry_run=dry_run,
             roots=await allowed_roots_for(run.workspace_id),
-            config=getattr(connector, "runtime_config", {}) or {},
+            config=config or getattr(connector, "runtime_config", {}) or {},
             settings=self.settings,
         )
         # A dry-run goes to the connector's dedicated preview() method, never to execute()
@@ -491,7 +537,7 @@ class ToolGateway:
             tool_call.attempt = attempt
             try:
                 result = await self._run_connector(
-                    connector, tool, tool_input, run, dry_run=dry_run
+                    session, connector, tool, tool_input, run, dry_run=dry_run
                 )
                 if result.ok:
                     _validate(tool.output_schema, result.data, f"{tool.id} output")

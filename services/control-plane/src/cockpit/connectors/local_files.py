@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import fnmatch
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,8 @@ from cockpit.connectors.base import (
     ToolResult,
     contain_path,
     contain_write_target,
+    is_within_roots,
+    safe_glob_pattern,
 )
 from cockpit.enums import ConnectorHealthState
 
@@ -70,10 +73,14 @@ class LocalFilesConnector(BaseConnector):
 
     def _list(self, inp: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
         root = contain_path(inp.get("root") or str(ctx.roots[0]), ctx.roots)
-        pattern = inp.get("glob", "**/*")
+        pattern = safe_glob_pattern(inp.get("glob", "**/*"))
         entries: list[dict[str, Any]] = []
         if root.is_dir():
             for p in sorted(root.glob(pattern)):
+                # Re-check each discovered path: a symlinked entry inside the root, or a `..`
+                # that slipped through, must not leak an outside file (review R2-F4).
+                if p.is_symlink() or not is_within_roots(p, ctx.roots):
+                    continue
                 if p.is_file() and not p.name.startswith("."):
                     stat = p.stat()
                     entries.append(
@@ -121,6 +128,9 @@ class LocalFilesConnector(BaseConnector):
         for p in candidates:
             if len(matches) >= MAX_MATCHES:
                 break
+            # Never follow a symlinked entry out of the roots (review R2-F4).
+            if p.is_symlink() or not is_within_roots(p, ctx.roots):
+                continue
             if not p.is_file() or p.suffix.lower() not in TEXT_SUFFIXES:
                 continue
             try:
@@ -181,7 +191,29 @@ class LocalFilesConnector(BaseConnector):
         assert not ctx.dry_run, "real write called for a dry-run — gateway routing bug"
         path, new_content, diff = self._resolve_write(inp, ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(new_content, encoding="utf-8")
+        data = new_content.encode("utf-8")
+        # Open with O_NOFOLLOW so a symlink swapped into the final component after the
+        # containment check is rejected at open time (closes the TOCTOU), and refuse a
+        # hardlink to a file that may live outside the workspace (review R2-F3). Check
+        # st_nlink BEFORE truncating so a rejected write does no damage.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            fd = os.open(path, flags, 0o644)
+        except OSError as exc:
+            raise ConnectorError(
+                f"Refusing to write “{path.name}” ({exc.strerror or exc}) — it may be a "
+                "symlink out of the workspace."
+            ) from exc
+        try:
+            if os.fstat(fd).st_nlink > 1:
+                raise ConnectorError(
+                    "Refusing to write a hardlinked file — it may share an inode with a "
+                    "file outside the workspace."
+                )
+            os.ftruncate(fd, 0)
+            os.write(fd, data)
+        finally:
+            os.close(fd)
         return ToolResult(
             ok=True,
             data={"path": str(path), "written": True, "diff": diff, "bytes": len(new_content)},

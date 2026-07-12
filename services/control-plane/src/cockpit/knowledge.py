@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cockpit.connectors.base import is_within_roots
 from cockpit.workspace import allowed_roots_for
 
 
@@ -37,11 +38,16 @@ class FTS5RetrievalProvider:
             text("DELETE FROM knowledge_fts WHERE workspace_id = :ws"), {"ws": workspace_id}
         )
         count = 0
-        for root in await allowed_roots_for(workspace_id):
+        roots = await allowed_roots_for(workspace_id)
+        for root in roots:
             if not root.exists():
                 continue
             for path in root.rglob("*.md"):
                 if any(part.startswith(".") for part in path.parts):
+                    continue
+                # Don't index through a symlinked entry that resolves outside the roots —
+                # that would pull an outside file into the search index (review R2-F4).
+                if path.is_symlink() or not is_within_roots(path, roots):
                     continue
                 try:
                     content = path.read_bytes()[:200_000].decode("utf-8", errors="replace")

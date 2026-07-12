@@ -16,13 +16,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cockpit.config import Settings
 from cockpit.enums import EventType, RunKind, RunStatus, SessionStatus
 from cockpit.events import EventBus, get_bus
-from cockpit.gateway import ApprovalPending, ToolDenied, ToolGateway
+from cockpit.gateway import ApprovalPending, SchemaViolation, ToolDenied, ToolGateway
 from cockpit.ids import new_id
 from cockpit.logging import get_logger
 from cockpit.models import (
@@ -33,6 +33,7 @@ from cockpit.models import (
     Run,
     UserProfile,
 )
+from cockpit.policy import Outcome
 from cockpit.registry import Registry, get_registry
 from cockpit.runtime import ProviderUnavailable, get_runtime
 from cockpit.runtime.base import RuntimeEvent, SessionContext
@@ -231,6 +232,21 @@ class RunProcessor:
         await self._verify_and_review(session, run, manifest, result)
 
     async def _persist_result(self, session: AsyncSession, run: Run, result: SkillResult) -> None:
+        # Idempotent across a crash/resume: a resumed run re-executes from the top and would
+        # otherwise insert a *second* set of artifact/memory rows (review R2-F10). Clear this
+        # run's prior artifacts and its still-proposed memories (+ sources) first, so the
+        # re-run replaces rather than duplicates. Already-approved memories are left untouched.
+        await session.execute(delete(Artifact).where(Artifact.run_id == run.id))
+        stale_memories = (
+            await session.scalars(
+                select(Memory).where(Memory.run_id == run.id, Memory.status == "proposed")
+            )
+        ).all()
+        for mem in stale_memories:
+            await session.execute(delete(MemorySource).where(MemorySource.memory_id == mem.id))
+            await session.delete(mem)
+        await session.flush()
+
         artifacts_meta = []
         for spec in result.artifacts:
             artifact_dir = self.settings.artifacts_dir / run.id
@@ -264,6 +280,7 @@ class RunProcessor:
             memory = Memory(
                 id=new_id("mem"),
                 workspace_id=run.workspace_id,
+                run_id=run.id,
                 kind=proposal.kind,
                 status="proposed",
                 content=proposal.content,
@@ -567,11 +584,27 @@ class RunProcessor:
 
         A live chat turn must NOT block a worker slot waiting on a human (review F4): if a
         requested tool needs approval, deny it here with a clear message and let the user run
-        it as a skill (which parks cleanly on the approval queue instead of holding the
-        worker). Chat today is only granted auto-allowed read-only tools, so this denies
-        nothing that currently works — it removes a latent local-DoS, not a feature. Promoting
-        chat to approval-gated tools requires session parking (see DECISIONS ADR-013).
+        it as a skill. We decide with a **read-only preflight** first, so a tool that needs
+        approval is denied WITHOUT creating a ToolCall/Approval/events that we would then have
+        to roll back — a rollback after an emit publishes ghost SSE events (review R2-F9).
+        Chat today is only granted auto-allowed read-only tools, so this denies nothing that
+        currently works. Promoting chat to approval-gated tools requires session parking
+        (DECISIONS ADR-013).
         """
+        needs_skill = (
+            f"This action needs your approval, which isn't available inside a live chat "
+            f"turn. Run “{tool_name}” as a skill so it goes through the approval queue."
+        )
+        try:
+            decision = await self.gateway.preflight(session, run, tool_name, tool_input)
+        except ToolDenied as exc:
+            return False, exc.reason, tool_input
+        except SchemaViolation as exc:
+            return False, str(exc), tool_input
+        if decision.outcome is not Outcome.ALLOW:
+            return False, needs_skill, tool_input
+
+        # Allowed → execute for real (this creates the ToolCall + events, then commits).
         try:
             result = await self.gateway.call_tool(
                 session,
@@ -586,16 +619,9 @@ class RunProcessor:
         except ToolDenied as exc:
             await session.commit()
             return False, exc.reason, tool_input
-        except ApprovalPending:
-            # Roll back the pending approval/tool-call this attempt created so it doesn't
-            # linger in the queue for a run that will not continue it.
+        except ApprovalPending:  # defensive — preflight already screened this out
             await session.rollback()
-            return (
-                False,
-                "This action needs your approval, which isn't available inside a live chat "
-                f"turn. Run “{tool_name}” as a skill so it goes through the approval queue.",
-                tool_input,
-            )
+            return False, needs_skill, tool_input
 
     # ------------------------------------------------------------------ shared
 
@@ -654,6 +680,21 @@ class RunProcessor:
 
 
 # ---------------------------------------------------------------------- loop & recovery
+
+
+def claim_still_owned(run: Run | None, worker_id: str) -> bool:
+    """False if this run vanished or another worker owns its claim while it's still queued.
+
+    Called after a task acquires the worker semaphore, which it may have waited on: a re-queue
+    or another process's startup recovery could have cleared/reassigned the claim in between, and
+    re-executing then would double-run the pipeline (review R2-F11). A run past `queued` has
+    already been flipped under the semaphore by its owner, so status alone gates it there.
+    """
+    if run is None:
+        return False
+    if run.status == RunStatus.QUEUED.value and run.worker_claim not in (worker_id, None):
+        return False
+    return True
 
 
 async def claim_next_run(session: AsyncSession) -> Run | None:
@@ -744,8 +785,14 @@ async def worker_loop(settings: Settings, *, stop: asyncio.Event) -> None:
         async with semaphore:
             async with db_session() as session:
                 run = await session.get(Run, run_id)
-                if run is not None:
-                    await processor.process(session, run)
+                # Re-verify we still own the claim before doing any work: if another worker's
+                # startup recovery or a re-queue cleared/reassigned it while this task waited on
+                # the semaphore, don't double-execute (review R2-F11). Single-process today, but
+                # this makes the guarantee robust and partially protects multi-process.
+                if not claim_still_owned(run, WORKER_ID):
+                    return
+                assert run is not None  # claim_still_owned rejects None
+                await processor.process(session, run)
 
     while not stop.is_set():
         try:

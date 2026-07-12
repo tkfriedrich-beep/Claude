@@ -50,4 +50,31 @@ Scope: single-user, local-first MVP. Assets: the user's files (vault, bizideas),
   impossible (gateway raises).
 - Tool not in manifest/allowlist ⇒ deny.
 - Path outside configured roots ⇒ deny.
-- Secrets never appear in `run_events`, logs, or API payloads (redaction test).
+- Secrets never appear in `run_events`, logs, or API payloads (redaction test) — including the
+  approval **edit** path and connector **preview-error** text (R2-F5).
+
+### Hardened by the round-2 adversarial review (`docs/reviews/codex-findings-r2.md`, ADR-015)
+
+Each item has a regression test in `tests/test_review_r2_fixes.py`.
+
+- **Safe Mode is a hard gate that beats allow rules.** A user `allow` rule cannot re-enable a
+  user-registered connector's external call while Safe Mode is on (R2-F1).
+- **Previews are side-effect-free by construction.** `n8n.preview()` sends no HTTP; it returns a
+  local description of the request. A mislabeled dry-run cannot fire a real effect (R2-F2, and
+  ADR-014's `preview()` fail-closed default).
+- **Filesystem containment holds against symlink *and* hardlink *and* discovery traversal.** Writes
+  refuse `O_NOFOLLOW`-rejected opens and `st_nlink > 1` hardlinks (R2-F3); list/search/reindex
+  reject `..`/absolute globs and skip symlinked or out-of-root entries (R2-F4); an Obsidian write
+  stays inside the vault (R2-F7).
+- **External mutations are keyed by their payload.** The n8n idempotency key covers a canonical
+  serialization of the input, so two distinct calls in one run cannot collide into a silent cached
+  no-op (R2-F6).
+- **A run acts under its own workspace's config.** Connector config is threaded per-workspace
+  through `ExecutionContext`, so a payload cannot route to another workspace's endpoint via the
+  global singleton (R2-F8; dormant in the single-user MVP).
+- **A denied chat tool leaves no trace.** A read-only policy preflight decides allow/deny with no
+  ToolCall/Approval/event writes — no ghost SSE events to roll back (R2-F9).
+- **Result and event persistence are idempotent across crash-resume.** Replay replaces a run's
+  artifacts and still-proposed memories rather than duplicating them (R2-F10); `UNIQUE(run_id,
+  seq)` + a savepoint-retry in `emit()` make a duplicate event sequence number impossible
+  (R2-F12).

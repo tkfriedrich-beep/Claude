@@ -19,7 +19,7 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · ❌ blocked
 
 | Gate | Result |
 | --- | --- |
-| `pytest` (control plane) | **87 passed** |
+| `pytest` (control plane) | **87 passed** at MVP; **121 passed** after review rounds 1–2 (see below) |
 | `ruff check` + `ruff format --check` | clean |
 | `mypy src` | no issues in 52 files |
 | `pnpm typecheck` (web) | clean |
@@ -99,6 +99,36 @@ Acted on the two design concerns from the review (DECISIONS ADR-014):
 
 Test gate: **pytest 106 passed** (+9 in `tests/test_hardening.py`) · ruff + mypy clean ·
 tsc + eslint clean · **e2e 10/10** · migration `0002` verified up/down/up.
+
+## Post-MVP: adversarial review round 2 (2026-07-12)
+
+A second review (`docs/reviews/codex-findings-r2.md`, prompt in
+`docs/reviews/ADVERSARIAL_REVIEW_PROMPT_R2.md`), briefed to attack the round-1 and ADR-014
+fixes, returned **12 findings** (1 Critical-class, 5 High, 4 Medium, 2 Low). Each was
+**re-verified against the on-branch code** (not only the reviewer's isolated repro — the
+reviewer again had no network to clone/run) and **fixed**, with a regression test per finding in
+`tests/test_review_r2_fixes.py` (15 tests). See DECISIONS ADR-015 for the full list. Highlights:
+
+- **F1** Safe Mode now beats an `allow` rule for untrusted external reads (was: allow-rule
+  override). **F2** `n8n.preview()` makes no HTTP call (was: real POST during a "dry run").
+- **F3** writes reject hardlinks (`O_NOFOLLOW` + `st_nlink>1`); **F4** list/search/reindex reject
+  `..`/absolute globs and skip symlinked/out-of-root entries; **F7** Obsidian writes stay in the
+  vault. **F5** secrets redacted on the approval-edit and preview-error paths. **F6** n8n
+  idempotency key covers the payload.
+- **F8** connector config is threaded per-workspace through `ExecutionContext` (no cross-workspace
+  endpoint routing). **F9** denied chat tools use a read-only preflight — no ghost SSE events.
+  **F10** result persistence replaces (not duplicates) on resume. **F11** `run_one` re-verifies
+  claim ownership. **F12** `UNIQUE(run_id, seq)` + savepoint-retry in `emit()`.
+
+Schema delta: migration `0003_memory_run_id_event_seq_unique` (`memories.run_id` +
+`run_events` unique index), idempotent per ADR-005, verified up/down/up on a fresh DB.
+
+Test gate (all actually executed 2026-07-12): **pytest 121 passed** (+15 in
+`tests/test_review_r2_fixes.py`) · `ruff check` + `ruff format --check` clean · `mypy src` no
+issues in 52 files · `pnpm typecheck` + `pnpm lint` clean · `vitest` 6 passed · migration `0003`
+verified up→base→up. Playwright e2e not re-run this round: the changes are control-plane-internal
+with no API-contract or event-shape change, and the full worker/skill/chat pipeline is covered by
+the 121 backend tests (M5's 10/10 e2e remains the last browser result).
 
 ## Known limitations (honest)
 

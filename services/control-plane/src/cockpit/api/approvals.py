@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cockpit.api.deps import get_session, get_workspace
 from cockpit.enums import ApprovalStatus, EventType, RunStatus, ToolCallStatus
 from cockpit.events import get_bus
+from cockpit.logging import redact
 from cockpit.models import Approval, Run, ToolCall, Workspace
 from cockpit.schemas import ApprovalOut, ApprovalResolveRequest
 from cockpit.state_machine import transition
@@ -91,9 +92,11 @@ async def resolve_approval(
         if body.decision == "approve":
             tool_call.status = ToolCallStatus.APPROVED.value
             if body.edited_input is not None:
-                # The idempotency key stays (it's the replay handle); execution will use the
-                # user's edited input instead of the originally proposed one.
-                tool_call.edited_input = body.edited_input
+                # Redact before persisting, exactly like the original `input` — a secret must
+                # never land raw in the audit DB even via the edit path (review R2-F5). Tool
+                # input should carry secret *references*, not raw values, so redaction only
+                # masks credential-shaped values and leaves normal edits intact.
+                tool_call.edited_input = redact(body.edited_input)
         else:
             tool_call.status = ToolCallStatus.DENIED.value
             tool_call.error = body.note or "You denied this action."

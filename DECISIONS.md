@@ -172,3 +172,58 @@ are explicitly flagged **[deviation]**.
   mislabeled dry-run can't perform a real effect. Genuinely-safe registered tools cost one
   approval, or a deliberate allow-rule. Alembic `env.py` now ignores FTS5 shadow tables so
   autogenerate stops trying to drop the search index.
+
+## ADR-015 — Round-2 adversarial-review fixes: close the seams around ADR-013/014 **[tightening]**
+
+- **Context:** A second review (`docs/reviews/ADVERSARIAL_REVIEW_PROMPT_R2.md`), briefed to
+  attack the round-1 and ADR-014 fixes rather than re-scan the tree, produced twelve confirmed
+  findings (`docs/reviews/codex-findings-r2.md`). Each was re-verified against the on-branch code
+  (not only the reviewer's isolated repro) and fixed, with a regression test per finding in
+  `tests/test_review_r2_fixes.py`.
+- **Decisions:**
+  - **F1 — Safe Mode beats allow rules.** In the untrusted-external-read branch of `policy.py`,
+    Safe Mode is now evaluated *before* the allow-rule loop, so a user `allow` rule can never
+    re-enable a registered connector's external call while Safe Mode is engaged.
+  - **F2 — a preview never touches the network.** `n8n.preview()` returns a local
+    `"Would POST …"` description of the request instead of POSTing a `dry_run:true` body a hostile
+    workflow could ignore. Previews are side-effect-free by construction, not by trust.
+  - **F3 — hardlinks join symlinks as a write-escape.** `local_files._write` opens with
+    `O_NOFOLLOW | O_CLOEXEC` and refuses any target with `st_nlink > 1` *before* truncating.
+  - **F4 — discovery cannot traverse out of the roots.** `safe_glob_pattern()` rejects
+    `..`/absolute globs; realpath-based `is_within_roots()` re-checks every path from
+    `glob`/`rglob`; list/search/knowledge-reindex/obsidian-iter all skip symlinks and
+    out-of-root entries.
+  - **F5 — secrets stay out of the audit trail on two more paths.** Preview-error text is
+    `redact_text`-wrapped before landing in `approval.diff_preview`; edited approval input is
+    `redact`-ed like the original input.
+  - **F6 — idempotency keys cover the payload.** The n8n key is
+    `sha256(run_id | tool_id | canonical_input)`, so two distinct calls to one webhook in one run
+    no longer collide into a silent cached no-op.
+  - **F7 — an Obsidian write stays in the vault.** `_delegate_write` rejects absolute/`..` paths
+    and delegates with the vault as the only root.
+  - **F8 — execution uses the run's own workspace config.** The gateway threads the DB
+    `Connector.config` through `ExecutionContext.config`; n8n/mcp prefer `ctx.config` over the
+    global singleton, so a payload can't route to another workspace's endpoint. Dormant in the
+    single-user MVP; manifest *resolution* still reads the singleton (bounded because these tools
+    always require approval — documented in the findings report).
+  - **F9 — no ghost events on a chat denial.** A read-only `gateway.preflight()` decides
+    allow/deny with no ToolCall/Approval/event writes; `_chat_permission` denies non-allowed tools
+    with zero persisted or published state, so there is nothing to roll back.
+  - **F10 — result persistence is idempotent.** `Memory` gains `run_id`; `_persist_result`
+    replaces this run's artifacts and still-*proposed* memories on replay rather than duplicating
+    them (approved memories untouched).
+  - **F11 — claim ownership is re-checked after the semaphore.** A pure `claim_still_owned()`
+    predicate skips a run whose claim was reassigned while the task waited (multi-process defense
+    in depth).
+  - **F12 — per-run event seq is unique at the DB.** A `UNIQUE(run_id, seq)` constraint plus a
+    `SAVEPOINT`-and-retry in `emit()` make a duplicate sequence number impossible even under the
+    lock-eviction race the terminal-event lock drop could create.
+- **Schema:** migration `0003_memory_run_id_event_seq_unique` adds `memories.run_id` and the
+  `run_events` unique index. Idempotent like `0002` (guarded `_has_column`/`_has_unique` + raw
+  DDL), so it is a no-op on a fresh `create_all` database (ADR-005) and only patches older ones.
+- **Consequences:** Safe Mode is a true hard gate; previews and dry-runs are provably
+  side-effect-free; the filesystem boundary holds against symlink *and* hardlink *and*
+  glob/symlink-discovery escape; secrets stay redacted on every persistence path; and event/result
+  persistence is idempotent across crash-resume. Two items (F8 manifest resolution, F11
+  multi-process) are dormant in the single-user/single-process MVP and fixed proportionately, with
+  the residual bound written down rather than hidden.

@@ -35,7 +35,12 @@ class N8nConnector(BaseConnector):
         super().__init__(manifest_dir)
         self.runtime_config: dict[str, Any] = {}
 
-    def _webhooks(self) -> list[dict[str, Any]]:
+    def _webhooks(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
+        # On the execution path, prefer THIS workspace's config (threaded in via ctx.config from
+        # the DB Connector row) over the global singleton's runtime_config, so a call never routes
+        # to another workspace's webhook URL if it refreshed the singleton in between (R2-F8).
+        if ctx is not None and ctx.config.get("webhooks") is not None:
+            return list(ctx.config.get("webhooks", []))
         return list(self.runtime_config.get("webhooks", []))
 
     def list_tools(self) -> list[ToolManifest]:
@@ -72,7 +77,7 @@ class N8nConnector(BaseConnector):
         return next((t for t in self.list_tools() if t.id == tool_id), None)
 
     async def health_check(self, ctx: ExecutionContext) -> HealthStatus:
-        hooks = self._webhooks()
+        hooks = self._webhooks(ctx)
         if not hooks:
             return HealthStatus(ConnectorHealthState.DEGRADED, "No webhooks registered yet")
         missing = [
@@ -90,42 +95,58 @@ class N8nConnector(BaseConnector):
     async def preview(
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
     ) -> ToolResult:
-        # n8n's dry-run asks the workflow itself to preview — still an external call, but the
-        # workflow contract is that dry_run=True performs no side effect. Only reachable when
-        # the webhook was registered supports_dry_run=true.
-        return await self._invoke(tool_id, validated_input, ctx, dry_run=True)
+        # A preview must be side-effect free. We cannot know a workflow's real diff without
+        # calling it, and calling it IS an external effect (a hostile/buggy workflow can ignore
+        # a `dry_run` flag) — so the honest preview is a LOCAL description of the request that
+        # would be sent, with no HTTP at all (review R2-F2).
+        name = tool_id.removeprefix("n8n.")
+        hook = next((h for h in self._webhooks(ctx) if h["name"] == name), None)
+        if hook is None:
+            raise ConnectorError(f"n8n webhook “{name}” is not registered.")
+        payload = json.dumps(validated_input, ensure_ascii=False)
+        return ToolResult(
+            ok=True,
+            data={
+                "preview": True,
+                "diff": f"Would POST to n8n workflow “{name}” ({hook.get('url', '?')}):\n"
+                f"{payload[:800]}",
+            },
+            summary=f"Preview: would call n8n workflow “{name}” — no request sent.",
+        )
 
     async def execute(
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
     ) -> ToolResult:
         assert not ctx.dry_run, "real n8n invoke called for a dry-run"
-        return await self._invoke(tool_id, validated_input, ctx, dry_run=False)
+        return await self._invoke(tool_id, validated_input, ctx)
 
     async def _invoke(
         self,
         tool_id: str,
         validated_input: dict[str, Any],
         ctx: ExecutionContext,
-        *,
-        dry_run: bool,
     ) -> ToolResult:
         name = tool_id.removeprefix("n8n.")
-        hook = next((h for h in self._webhooks() if h["name"] == name), None)
+        hook = next((h for h in self._webhooks(ctx) if h["name"] == name), None)
         if hook is None:
             raise ConnectorError(f"n8n webhook “{name}” is not registered.")
 
         body = json.dumps(
             {
-                "dry_run": dry_run,
+                "dry_run": False,
                 "payload": validated_input,
                 "correlation_id": ctx.correlation_id,
             },
             ensure_ascii=False,
         ).encode()
+        # Idempotency key must cover the actual input, not just run+tool — otherwise two
+        # distinct calls to the same webhook in one run collide and a caching workflow returns
+        # the first response for the second (a silent no-op reported as success — review R2-F6).
+        canonical = json.dumps(validated_input, sort_keys=True, ensure_ascii=False)
         headers = {
             "Content-Type": "application/json",
             "X-Cockpit-Idempotency-Key": hashlib.sha256(
-                f"{ctx.run_id}|{tool_id}".encode()
+                f"{ctx.run_id}|{tool_id}|{canonical}".encode()
             ).hexdigest()[:32],
             "X-Correlation-Id": ctx.correlation_id,
         }
@@ -159,6 +180,6 @@ class N8nConnector(BaseConnector):
         return ToolResult(
             ok=True,
             data=data,
-            summary=f"n8n workflow “{name}” {'previewed (dry run)' if dry_run else 'executed'}",
-            external_confirmed=not dry_run,
+            summary=f"n8n workflow “{name}” executed",
+            external_confirmed=True,
         )

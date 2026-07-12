@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -168,6 +168,33 @@ def contain_path(candidate: str | Path, roots: list[Path]) -> Path:
     raise ConnectorError(
         f"Path “{candidate}” is outside the configured roots — refusing to touch it."
     )
+
+
+def is_within_roots(path: Path, roots: list[Path]) -> bool:
+    """True if `path` (symlinks resolved) lives under an allowed root. Never raises.
+
+    Use this to re-check every path discovered by glob/rglob before stat/read — the starting
+    root being contained does not make a *symlinked entry inside it* contained (review R2-F4).
+    """
+    try:
+        final = Path(os.path.realpath(path))
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            final.relative_to(root.resolve())
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def safe_glob_pattern(pattern: str) -> str:
+    """Reject glob patterns that escape the starting directory (`..`, absolute) — R2-F4."""
+    parts = PurePosixPath(pattern).parts
+    if pattern.startswith("/") or ".." in parts or ".." in pattern.split("\\"):
+        raise ConnectorError(f"Unsafe glob pattern “{pattern}” — no absolute paths or “..”.")
+    return pattern
 
 
 def contain_write_target(candidate: str | Path, roots: list[Path]) -> Path:

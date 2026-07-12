@@ -280,6 +280,9 @@ Index("ix_runs_claimable", Run.status, Run.scheduled_for)
 
 class RunEvent(Base):
     __tablename__ = "run_events"
+    # (run_id, seq) is unique so a lock-eviction race can never assign a duplicate per-run
+    # sequence number — emit() retries on conflict (review R2-F12).
+    __table_args__ = (UniqueConstraint("run_id", "seq"),)
     # Global autoincrement id doubles as the SSE cursor (Last-Event-ID / ?since=).
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
@@ -359,6 +362,10 @@ class Memory(Base, TimestampMixin):
     __tablename__ = "memories"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    # Which run proposed this memory — lets result persistence stay idempotent across a
+    # crash/resume by replacing a run's still-proposed memories rather than duplicating them
+    # (review R2-F10). Null for manually-created memories.
+    run_id: Mapped[str | None] = mapped_column(String(64), index=True)
     kind: Mapped[str] = mapped_column(String(30), default="working")
     status: Mapped[str] = mapped_column(String(20), default="proposed", index=True)
     content: Mapped[str] = mapped_column(Text)

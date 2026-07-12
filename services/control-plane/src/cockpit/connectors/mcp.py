@@ -94,8 +94,16 @@ class MCPConnector(BaseConnector):
         super().__init__(manifest_dir)
         self.runtime_config: dict[str, Any] = {}
 
-    def _servers(self) -> list[dict[str, Any]]:
-        return [s for s in self.runtime_config.get("servers", []) if s.get("enabled", True)]
+    def _servers(self, ctx: ExecutionContext | None = None) -> list[dict[str, Any]]:
+        # On the execution path, prefer THIS workspace's config (threaded in via ctx.config from
+        # the DB Connector row) over the global singleton's runtime_config, so a call never routes
+        # to another workspace's MCP server if it refreshed the singleton in between (R2-F8).
+        source = (
+            ctx.config
+            if ctx is not None and ctx.config.get("servers") is not None
+            else self.runtime_config
+        )
+        return [s for s in source.get("servers", []) if s.get("enabled", True)]
 
     def list_tools(self) -> list[ToolManifest]:
         tools: list[ToolManifest] = []
@@ -129,7 +137,7 @@ class MCPConnector(BaseConnector):
         return next((t for t in self.list_tools() if t.id == tool_id), None)
 
     async def health_check(self, ctx: ExecutionContext) -> HealthStatus:
-        servers = self._servers()
+        servers = self._servers(ctx)
         if not servers:
             return HealthStatus(ConnectorHealthState.DEGRADED, "No MCP servers registered yet")
         details = []
@@ -153,7 +161,7 @@ class MCPConnector(BaseConnector):
         self, tool_id: str, validated_input: dict[str, Any], ctx: ExecutionContext
     ) -> ToolResult:
         _, server_name, tool_name = tool_id.split(".", 2)
-        server = next((s for s in self._servers() if s["name"] == server_name), None)
+        server = next((s for s in self._servers(ctx) if s["name"] == server_name), None)
         if server is None:
             raise ConnectorError(f"MCP server “{server_name}” is not registered/enabled.")
 

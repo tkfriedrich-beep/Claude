@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from cockpit.connectors.base import (
     PreviewNotSupported,
     ToolResult,
     contain_path,
+    is_within_roots,
 )
 from cockpit.connectors.local_files import MAX_READ_BYTES, LocalFilesConnector
 from cockpit.enums import ConnectorHealthState
@@ -92,7 +94,12 @@ class ObsidianConnector(BaseConnector):
         base = vault if section in ("", "all") else vault / section
         if not base.exists():
             return []
-        return sorted(p for p in base.rglob("*.md") if not p.name.startswith("."))
+        # Skip symlinked notes that resolve outside the vault (review R2-F4).
+        return sorted(
+            p
+            for p in base.rglob("*.md")
+            if not p.name.startswith(".") and not p.is_symlink() and is_within_roots(p, [vault])
+        )
 
     def _list_notes(self, vault: Path, inp: dict[str, Any]) -> ToolResult:
         notes = []
@@ -183,9 +190,21 @@ class ObsidianConnector(BaseConnector):
     def _delegate_write(
         self, vault: Path, inp: dict[str, Any], ctx: ExecutionContext, *, preview: bool
     ) -> ToolResult:
-        # Delegate write mechanics (containment, diff, real vs preview) to the local-files
-        # implementation so the symlink guard and dry-run capability live in one place.
+        # An Obsidian note path must be RELATIVE to the vault — an absolute path or `..` would
+        # otherwise let a "write a vault note" action land in another configured root (the
+        # ideas folder, or data/local/cockpit.db) because the shared helper checks all roots
+        # (review R2-F7). Delegate with the vault as the ONLY root.
+        rel = inp["path"]
+        rel_parts = Path(rel).parts
+        if Path(rel).is_absolute() or ".." in rel_parts:
+            raise ConnectorError(
+                f"Obsidian note path must be relative to the vault, with no “..” — got “{rel}”."
+            )
+        payload = {"path": str(vault / rel), "content": inp["content"]}
+        vault_ctx = replace(ctx, roots=[vault])
         helper = LocalFilesConnector.__new__(LocalFilesConnector)
-        target = vault / inp["path"] if not Path(inp["path"]).is_absolute() else Path(inp["path"])
-        payload = {"path": str(target), "content": inp["content"]}
-        return helper._preview_write(payload, ctx) if preview else helper._write(payload, ctx)
+        return (
+            helper._preview_write(payload, vault_ctx)
+            if preview
+            else helper._write(payload, vault_ctx)
+        )

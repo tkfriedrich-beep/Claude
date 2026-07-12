@@ -15,7 +15,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def include_object(obj, name, type_, reflected, compare_to):  # noqa: ANN001, ANN201
+def include_object(obj, name, type_, reflected, compare_to):
     # SQLite FTS5 creates internal shadow tables (knowledge_fts, _data, _idx, _docsize,
     # _content, _config). They aren't in our metadata; never let autogenerate drop them.
     if type_ == "table" and (name == "knowledge_fts" or name.startswith("knowledge_fts_")):

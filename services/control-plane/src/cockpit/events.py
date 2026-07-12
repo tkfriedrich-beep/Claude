@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cockpit.enums import EventType
@@ -123,26 +124,41 @@ class EventBus:
     ) -> RunEvent:
         """Persist an event (redacted) and publish it. Caller owns the transaction."""
         clean: dict[str, Any] = redact(payload or {})
-        async with self._seq_locks[run_id]:
-            seq = (
-                await session.scalar(
-                    select(func.coalesce(func.max(RunEvent.seq), 0)).where(
-                        RunEvent.run_id == run_id
+        text = human_text if human_text is not None else humanize(type, clean)
+        # The per-run lock serializes the common case; the unique (run_id, seq) constraint plus
+        # this retry make a duplicate sequence number impossible even under the lock-split race
+        # a terminal-event eviction could otherwise create (review R2-F12).
+        event: RunEvent | None = None
+        for _attempt in range(8):
+            async with self._seq_locks[run_id]:
+                seq = (
+                    await session.scalar(
+                        select(func.coalesce(func.max(RunEvent.seq), 0)).where(
+                            RunEvent.run_id == run_id
+                        )
                     )
+                    or 0
+                ) + 1
+                candidate = RunEvent(
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    seq=seq,
+                    type=type.value,
+                    ts=datetime.now(UTC),
+                    human_text=text,
+                    payload=clean,
                 )
-                or 0
-            ) + 1
-            event = RunEvent(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                seq=seq,
-                type=type.value,
-                ts=datetime.now(UTC),
-                human_text=human_text if human_text is not None else humanize(type, clean),
-                payload=clean,
-            )
-            session.add(event)
-            await session.flush()  # assigns autoincrement id
+                try:
+                    async with session.begin_nested():  # SAVEPOINT — isolates a conflict
+                        session.add(candidate)
+                        await session.flush()  # assigns autoincrement id
+                    event = candidate
+                    break
+                except IntegrityError:
+                    session.expunge(candidate)  # lost the seq race — recompute and retry
+                    continue
+        if event is None:  # pragma: no cover — 8 consecutive conflicts is not realistic
+            raise RuntimeError(f"could not assign a unique event seq for run {run_id}")
         self._publish(event_to_dict(event))
         # A run emits nothing after a terminal event, so drop its seq lock rather than
         # retaining one lock per historical run forever (review F6).

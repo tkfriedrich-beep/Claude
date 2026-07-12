@@ -129,6 +129,13 @@ def evaluate(tool: ToolSpec, ctx: PolicyContext) -> Decision:
     # system. It needs approval (or an explicit allow rule created in the policy editor).
     if not is_write:
         if tool.external_side_effects and not tool.trusted:
+            # Safe Mode is a hard emergency gate: it beats even an explicit allow rule, so a
+            # user-registered connector's external call cannot fire while Safe Mode is on
+            # (review R2-F1 — the allow rule must never override Safe Mode).
+            if ctx.safe_mode:
+                return deny(
+                    "Safe Mode is on — a user-registered connector's external call is blocked."
+                )
             for rule in ctx.rules:
                 if rule.kind is PolicyKind.ALLOW and rule.matches(tool, ctx.skill_slug):
                     return Decision(
@@ -137,10 +144,6 @@ def evaluate(tool: ToolSpec, ctx: PolicyContext) -> Decision:
                         risk,
                         notes=("allowlist", "untrusted"),
                     )
-            if ctx.safe_mode:
-                return deny(
-                    "Safe Mode is on — a user-registered connector's external call is blocked."
-                )
             return Decision(
                 Outcome.REQUIRE_APPROVAL,
                 "External call from a connector you registered — approve it, or add an "
