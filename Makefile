@@ -7,8 +7,8 @@ WEB := apps/web
 
 setup: ## Install all dependencies and migrate the local database
 	cd $(CP) && uv sync --extra dev
+	cd $(CP) && uv run alembic upgrade head   # migrate first so a web-deps hiccup can't leave the DB unmigrated
 	pnpm install
-	cd $(CP) && uv run alembic upgrade head
 
 dev: ## Run control plane (:8787) and web (:3000) together
 	@trap 'kill 0' EXIT; \
