@@ -1,13 +1,15 @@
 "use client";
 
+// Knowledge (/knowledge) — full-text search over the local vault. The mono status inside
+// the search bar is live: match count once a query ran, "SEARCHING…" mid-flight, and the
+// real indexed-note count the API returned after a reindex — never an invented number.
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { EmptyState, ErrorState } from "@/components/ui/states";
-import { Library, RefreshCw, Search } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { CardSkeleton, EmptyState, ErrorState } from "@/components/ui/states";
 
 export default function KnowledgePage() {
   const [query, setQuery] = useState("");
@@ -22,12 +24,23 @@ export default function KnowledgePage() {
     onSuccess: () => submitted && refetch(),
   });
 
+  const matches = data?.results.length;
+  const status = isFetching
+    ? "SEARCHING…"
+    : error
+      ? "ERROR"
+      : matches !== undefined
+        ? `${matches} ${matches === 1 ? "MATCH" : "MATCHES"}`
+        : reindex.data
+          ? `FTS · ${reindex.data.indexed} ${reindex.data.indexed === 1 ? "NOTE" : "NOTES"}`
+          : "FTS";
+
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Knowledge</h1>
-          <p className="text-[13px] text-muted">
+    <div className="mx-auto max-w-[1360px] space-y-[22px]">
+      <header className="fadeup flex flex-wrap items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-semibold tracking-[-0.01em]">Knowledge</h1>
+          <p className="mt-1 text-[13px] text-muted">
             Full-text search over your vault and local sources. Files stay canonical — this is
             only an index (semantic retrieval is a roadmap upgrade).
           </p>
@@ -42,40 +55,76 @@ export default function KnowledgePage() {
           e.preventDefault();
           setSubmitted(query.trim());
         }}
-        className="relative"
+        className="fadeup flex items-center gap-3.5 rounded-[12px] border border-line-control bg-raised px-5 py-3.5 transition-colors focus-within:border-accent"
       >
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)}
-               placeholder="Search your notes… (press Enter)" className="h-11 pl-9"
-               aria-label="Knowledge search" />
+        <span aria-hidden className="text-[15px] text-faint">
+          ⌕
+        </span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search your notes… (press Enter)"
+          aria-label="Knowledge search"
+          className="min-w-0 flex-1 bg-transparent text-[15.5px] text-ink outline-none placeholder:text-muted/70"
+        />
+        <span aria-live="polite" className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-faint">
+          {status}
+        </span>
       </form>
+
+      {reindex.isError ? (
+        <p className="text-[12.5px] text-danger">Reindex failed — {reindex.error.message}</p>
+      ) : null}
 
       {error ? (
         <ErrorState detail={(error as Error).message} onRetry={() => refetch()} />
       ) : !submitted ? (
-        <EmptyState icon={<Library />} title="Search your local knowledge"
-                    hint="Try “Nordwind”, “studio”, or “pricing” with the demo vault." />
+        <EmptyState
+          title="Search your local knowledge."
+          hint="Try “Nordwind”, “studio”, or “pricing” with the demo vault."
+          action={
+            <p className="text-[12.5px] text-muted-2">
+              {reindex.data ? `${reindex.data.indexed} notes indexed · ` : null}
+              semantic retrieval is a roadmap upgrade
+            </p>
+          }
+        />
       ) : isFetching ? (
-        <p className="text-[13px] text-muted">Searching…</p>
-      ) : (data?.results ?? []).length === 0 ? (
-        <EmptyState title={`No matches for “${submitted}”`}
-                    hint="Rebuild the index if you recently added files." />
+        <div className="space-y-3">
+          <CardSkeleton lines={2} />
+          <CardSkeleton lines={2} />
+        </div>
+      ) : !data || data.results.length === 0 ? (
+        <EmptyState
+          title={`No matches for “${submitted}”`}
+          hint="Rebuild the index if you recently added files."
+        />
       ) : (
-        <ul className="space-y-2">
-          {data!.results.map((result, i) => (
-            <Card key={i}>
-              <CardBody className="pt-3.5">
-                <p className="text-[14px] font-semibold">{result.title}</p>
-                <p className="truncate font-mono text-[11px] text-muted">{result.path}</p>
-                <p className="mt-1.5 text-[13px] text-muted"
-                   dangerouslySetInnerHTML={{
-                     __html: result.snippet
-                       .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-                       .replaceAll("⟪", "<mark class='bg-accent-soft text-accent rounded px-0.5'>")
-                       .replaceAll("⟫", "</mark>"),
-                   }} />
-              </CardBody>
-            </Card>
+        <ul className="space-y-3">
+          {data.results.map((result, i) => (
+            <li key={i} className="fadeup">
+              <Card className="px-7 py-[22px] transition-colors hover:border-line-control">
+                <div className="flex items-baseline gap-4">
+                  <p className="min-w-0 flex-1 truncate text-[15.5px] font-semibold">
+                    {result.title}
+                  </p>
+                  <p className="max-w-[45%] truncate font-mono text-[10.5px] text-faint">
+                    {result.path}
+                  </p>
+                </div>
+                <p
+                  className="mt-1.5 text-[13.5px] leading-relaxed text-muted"
+                  dangerouslySetInnerHTML={{
+                    __html: result.snippet
+                      .replaceAll("&", "&amp;")
+                      .replaceAll("<", "&lt;")
+                      .replaceAll(">", "&gt;")
+                      .replaceAll("⟪", "<mark class='bg-accent-soft text-accent rounded px-0.5'>")
+                      .replaceAll("⟫", "</mark>"),
+                  }}
+                />
+              </Card>
+            </li>
           ))}
         </ul>
       )}

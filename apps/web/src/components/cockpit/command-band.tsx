@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { ACTIVE_RUN_STATUSES, cn } from "@/lib/utils";
+import { ACTIVE_RUN_STATUSES } from "@/lib/utils";
 import { deriveOttoState, OTTO_STATUS, OttoPulse } from "@/components/cockpit/otto-pulse";
 import { useWorkMode, type WorkMode } from "@/components/cockpit/work-mode";
 import { SegmentedControl } from "@/components/ui/segmented";
