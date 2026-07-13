@@ -486,7 +486,7 @@ class RunProcessor:
             ),
             workspace_roots=await allowed_roots_for(run.workspace_id),
             assistant_name=assistant_name,
-            settings={"max_turns": 8},
+            settings={"max_turns": 8, "model": getattr(ws, "model", "") or ""},
         )
 
         if RunStatus(run.status) is RunStatus.TRIAGING:

@@ -293,3 +293,21 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
 - [x] a11y fix from axe (role=status on live indicator); UI polish from screenshot review
 - [x] Live Claude runtime verified (chat + resume, usage captured)
 - [x] Final gates re-run after every fix (tables above)
+
+### M6 — Providers, editable integrations & secrets — ✅ (2026-07-13)
+
+- [x] `OpenAIAgentRuntime` (Chat Completions, streamed deltas + token usage/cost) and
+      `OllamaAgentRuntime` (local `/api/chat`, streamed, free) on the existing `AgentRuntime`
+      contract via a shared `HTTPChatRuntime` base; both dropped from the stub list
+- [x] `LocalSecretStore` — env-over-file, gitignored `data/local/secrets.env` at mode 0600;
+      write-only secrets API (list names / set / delete), values never in DB, logs, or events
+- [x] Providers/models API (`GET /providers`): availability, secret status, Ollama live model
+      discovery + OpenAI curated/live list; model persisted in workspace settings → runtime
+- [x] Editable integrations: enable/disable + config edit (existing) plus resource removal
+      (`DELETE /connectors/{slug}/resources/{name}`) for n8n webhooks / MCP servers
+- [x] Web: Integrations page gets a provider+model selector, a write-only Secrets manager, and
+      per-connector resource management; Settings provider dropdown extended
+- [x] Gates: control-plane pytest 171 passed; ruff + mypy clean; web tsc + eslint clean;
+      vitest 6 passed; `next build` 16/16 pages; contracts regenerated (`make contracts`)
+- [x] Live smoke: secret saved at 0600 and absent from the DB; OpenAI flips to available once
+      keyed; n8n webhook add→remove; model persists across settings reads

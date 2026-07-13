@@ -70,6 +70,7 @@ export interface SettingsResponse {
   theme: string;
   default_mode: "read_only" | "draft" | "act";
   provider: string;
+  model: string;
   vault_path: string | null;
   bizideas_path: string | null;
   daily_budget_usd: number;
@@ -77,6 +78,37 @@ export interface SettingsResponse {
   data_dir: string;
   providers: Record<string, { available: boolean; detail: string }>;
   skills_loaded: number;
+}
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  kind: "local" | "cloud";
+  available: boolean;
+  detail: string;
+  requires_secret: string | null;
+  secret_configured: boolean;
+  models: string[];
+  default_model: string;
+}
+
+export interface ProvidersResponse {
+  selected_provider: string;
+  selected_model: string;
+  providers: ProviderInfo[];
+}
+
+export interface SecretSlot {
+  name: string;
+  description: string;
+  category: "provider" | "connector" | "custom";
+  configured: boolean;
+  source: "env" | "file" | "none";
+  deletable: boolean;
+}
+
+export interface SecretsResponse {
+  secrets: SecretSlot[];
 }
 
 export interface DoctorReport {

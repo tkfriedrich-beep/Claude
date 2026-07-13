@@ -101,8 +101,32 @@ def test_otto_prompt_versioned_and_personalized() -> None:
 
 
 def test_stub_providers_refuse_honestly() -> None:
-    for provider in ("openai", "ollama", "langgraph"):
-        with pytest.raises(ProviderUnavailable):
-            get_runtime(provider)
+    # langgraph is still a scaffold; unknown providers are refused; both must not crash the app.
+    with pytest.raises(ProviderUnavailable):
+        get_runtime("langgraph")
     with pytest.raises(ProviderUnavailable):
         get_runtime("unknown-thing")
+
+
+def test_openai_ollama_are_real_runtimes() -> None:
+    from cockpit.runtime import OllamaAgentRuntime, OpenAIAgentRuntime
+
+    assert isinstance(get_runtime("openai"), OpenAIAgentRuntime)
+    assert isinstance(get_runtime("ollama"), OllamaAgentRuntime)
+    # get_runtime is a singleton per provider — interrupt/cancel must reach the live instance.
+    assert get_runtime("openai") is get_runtime("openai")
+
+
+def test_openai_available_false_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    from cockpit.runtime.openai_runtime import OpenAIAgentRuntime
+
+    ok, detail = OpenAIAgentRuntime().available()
+    assert ok is False and "OPENAI_API_KEY" in detail  # honest, never raises
+
+
+def test_ollama_available_never_raises() -> None:
+    from cockpit.runtime.ollama_runtime import OllamaAgentRuntime
+
+    ok, detail = OllamaAgentRuntime().available()
+    assert isinstance(ok, bool) and detail  # depends on whether a local daemon is up

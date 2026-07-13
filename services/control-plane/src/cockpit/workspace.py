@@ -23,6 +23,7 @@ class WorkspaceSettings:
     bizideas_path: str | None = None
     default_mode: str = "draft"
     provider: str = "mock"
+    model: str = ""
     theme: str = "system"
     daily_budget_usd: float = 5.0
     run_budget_usd: float = 1.0
@@ -48,6 +49,7 @@ async def get_workspace_settings(session: AsyncSession, workspace_id: str) -> Wo
         bizideas_path=s.get("bizideas_path"),
         default_mode=s.get("default_mode", "draft"),
         provider=s.get("provider", "mock"),
+        model=s.get("model", ""),
         theme=s.get("theme", "system"),
         daily_budget_usd=float(s.get("daily_budget_usd", app.daily_budget_usd)),
         run_budget_usd=float(s.get("run_budget_usd", app.run_budget_usd)),

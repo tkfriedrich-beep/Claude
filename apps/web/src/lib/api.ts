@@ -16,9 +16,11 @@ import type {
   PersonItem,
   Policy,
   ProjectItem,
+  ProvidersResponse,
   Run,
   RunEvent,
   Schedule,
+  SecretsResponse,
   Session,
   SettingsResponse,
   Skill,
@@ -88,6 +90,15 @@ export const api = {
   settings: () => request<SettingsResponse>("/settings"),
   patchSettings: (body: Record<string, unknown>) =>
     request<{ ok: boolean }>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  providers: () => request<ProvidersResponse>("/providers"),
+  secrets: () => request<SecretsResponse>("/secrets"),
+  putSecret: (name: string, value: string) =>
+    request<{ name: string; configured: boolean; source: string; shadowed_by_env: boolean }>(
+      `/secrets/${encodeURIComponent(name)}`,
+      { method: "PUT", body: JSON.stringify({ value }) },
+    ),
+  deleteSecret: (name: string) =>
+    request<void>(`/secrets/${encodeURIComponent(name)}`, { method: "DELETE" }),
   domains: () => request<Domain[]>("/domains"),
   patchDomain: (key: string, body: { enabled?: boolean; read_only?: boolean }) =>
     request<Domain>(`/domains/${key}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -150,6 +161,11 @@ export const api = {
     request<Connector>(`/connectors/${slug}`, { method: "PATCH", body: JSON.stringify(body) }),
   registerConnector: (body: Record<string, unknown>) =>
     request<Connector>("/connectors", { method: "POST", body: JSON.stringify(body) }),
+  removeConnectorResource: (slug: string, name: string) =>
+    request<Connector>(
+      `/connectors/${slug}/resources/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    ),
 
   // automations
   automations: () => request<Schedule[]>("/automations"),

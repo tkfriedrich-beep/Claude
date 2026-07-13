@@ -7,6 +7,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+# Reasoning providers with a real, implemented runtime. Keep in sync with runtime._FACTORIES.
+ProviderId = Literal["mock", "claude", "openai", "ollama"]
+
 # ---------- requests ----------
 
 
@@ -19,7 +22,8 @@ class OnboardingRequest(BaseModel):
     enable_demo_data: bool = True
     safe_mode: bool = True
     default_autonomy: int = Field(default=3, ge=0, le=5)
-    provider: Literal["mock", "claude"] = "mock"
+    provider: ProviderId = "mock"
+    model: str | None = Field(default=None, max_length=120)
 
 
 class CommandRequest(BaseModel):
@@ -89,11 +93,16 @@ class SettingsPatchRequest(BaseModel):
     kill_switch: bool | None = None
     theme: str | None = None
     default_mode: Literal["read_only", "draft", "act"] | None = None
-    provider: Literal["mock", "claude"] | None = None
+    provider: ProviderId | None = None
+    model: str | None = Field(default=None, max_length=120)
     vault_path: str | None = None
     bizideas_path: str | None = None
     daily_budget_usd: float | None = Field(default=None, ge=0)
     run_budget_usd: float | None = Field(default=None, ge=0)
+
+
+class SecretPutRequest(BaseModel):
+    value: str = Field(min_length=1, max_length=8192)
 
 
 class MemoryPatchRequest(BaseModel):

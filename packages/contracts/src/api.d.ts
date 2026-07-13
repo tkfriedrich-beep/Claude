@@ -90,6 +90,61 @@ export interface paths {
         patch: operations["patch_settings_api_v1_settings_patch"];
         trace?: never;
     };
+    "/api/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Providers
+         * @description Rich provider catalog for the selector: availability, secret status, and model lists.
+         */
+        get: operations["list_providers_api_v1_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Secrets */
+        get: operations["list_secrets_api_v1_secrets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/secrets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Secret */
+        put: operations["put_secret_api_v1_secrets__name__put"];
+        post?: never;
+        /** Delete Secret */
+        delete: operations["delete_secret_api_v1_secrets__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/domains": {
         parameters: {
             query?: never;
@@ -500,6 +555,26 @@ export interface paths {
         /** Check Connector Health */
         post: operations["check_connector_health_api_v1_connectors__slug__health_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connectors/{slug}/resources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Connector Resource
+         * @description Remove a registered n8n webhook (slug=n8n) or MCP server (slug=mcp) by name.
+         */
+        delete: operations["remove_connector_resource_api_v1_connectors__slug__resources__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1145,7 +1220,9 @@ export interface components {
              * @default mock
              * @enum {string}
              */
-            provider: "mock" | "claude";
+            provider: "mock" | "claude" | "openai" | "ollama";
+            /** Model */
+            model?: string | null;
         };
         /** PolicyCreateRequest */
         PolicyCreateRequest: {
@@ -1274,6 +1351,11 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
+        /** SecretPutRequest */
+        SecretPutRequest: {
+            /** Value */
+            value: string;
+        };
         /** SessionOut */
         SessionOut: {
             /** Id */
@@ -1308,7 +1390,9 @@ export interface components {
             /** Default Mode */
             default_mode?: ("read_only" | "draft" | "act") | null;
             /** Provider */
-            provider?: ("mock" | "claude") | null;
+            provider?: ("mock" | "claude" | "openai" | "ollama") | null;
+            /** Model */
+            model?: string | null;
             /** Vault Path */
             vault_path?: string | null;
             /** Bizideas Path */
@@ -1518,6 +1602,116 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_v1_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_secrets_api_v1_secrets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    put_secret_api_v1_secrets__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretPutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_secret_api_v1_secrets__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2341,6 +2535,38 @@ export interface operations {
             header?: never;
             path: {
                 slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_connector_resource_api_v1_connectors__slug__resources__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                name: string;
             };
             cookie?: never;
         };
