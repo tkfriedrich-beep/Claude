@@ -1,13 +1,16 @@
 import { cn } from "@/lib/utils";
 
-type Tone = "accent" | "warn" | "danger" | "muted" | "outline";
+type Tone = "accent" | "warn" | "danger" | "muted" | "outline" | "ok";
 
+// OttoOS spec §03: chips are hairline-bordered mono pills. Amber appears ONLY when
+// human judgment is required (pending decisions, attention, shadow, degraded).
 const tones: Record<Tone, string> = {
-  accent: "bg-accent-soft text-accent",
-  warn: "bg-warn-soft text-warn",
-  danger: "bg-danger-soft text-danger",
-  muted: "bg-line/50 text-muted",
-  outline: "border border-line text-muted bg-transparent",
+  accent: "text-accent-hover border border-(--accent-border) bg-transparent",
+  warn: "text-warn border border-(--warn-border) bg-warn-soft",
+  danger: "text-danger border border-danger/40 bg-transparent",
+  muted: "text-muted-2 border border-line-control bg-transparent",
+  outline: "border border-line-control text-muted-2 bg-transparent",
+  ok: "text-ok border border-ok/40 bg-transparent",
 };
 
 export function Badge({
@@ -18,8 +21,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium",
-        "whitespace-nowrap leading-4",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] font-mono text-[10.5px] font-medium",
+        "whitespace-nowrap leading-4 tracking-[0.06em] uppercase",
         tones[tone],
         className,
       )}
@@ -28,8 +31,11 @@ export function Badge({
   );
 }
 
+// Risk ladder chips (spec §03): R0/R1 neutral · R2 gold (reversible local writes) ·
+// R3 amber (external — judgment) · R4 danger.
 export function RiskBadge({ risk }: { risk: string }) {
-  const tone = risk === "R4" ? "danger" : risk === "R3" ? "warn" : risk === "R2" ? "accent" : "muted";
+  const tone: Tone =
+    risk === "R4" ? "danger" : risk === "R3" ? "warn" : risk === "R2" ? "accent" : "muted";
   const label: Record<string, string> = {
     R0: "R0 · local read",
     R1: "R1 · external read",

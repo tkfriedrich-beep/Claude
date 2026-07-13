@@ -19,12 +19,13 @@ export function applyTheme(theme: string) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<string>("system");
+  const [theme, setTheme] = useState<string>("dark");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem("cockpit-theme") ?? "system";
+    // Midnight graphite is the OttoOS default; parchment is the preserved alternative.
+    const saved = localStorage.getItem("cockpit-theme") ?? "dark";
     setTheme(saved);
     applyTheme(saved);
   }, []);

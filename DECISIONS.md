@@ -365,3 +365,43 @@ are explicitly flagged **[deviation]**.
   streams, secret-store round-trip, providers/secrets/resource APIs). Honest bound: without a
   provider key or a local Ollama, those providers report `needs setup` and the cockpit stays on the
   offline demo runtime.
+
+## ADR-019 — OttoOS visual redesign: presentation-layer evolution, nothing removed **[capability]**
+
+- **Context:** A Claude Design handoff (`OttoOS Design Spec` + interactive `OttoOS Cockpit`
+  prototype, direction 1a "Flight Deck", champagne gold) rebrands the cockpit as **OttoOS** and
+  restructures the shell around judgment. The spec's own constraint: backend, contracts, and policy
+  gateway unchanged; steps 1–5 of its "Push to code" plan require no backend changes.
+- **Decision:**
+  - **Tokens, not forks.** `globals.css` swaps values under the SAME custom-property architecture,
+    adding the hairline ladder (shell→card→row→control→button), the five-step ivory ink ladder, the
+    champagne-gold accent family (`#c9a961`, on-accent `#171308`), judgment amber (reserved
+    exclusively for "needs you"), desaturated `--ok`, and well/tile/nav surfaces. Dark "midnight
+    graphite" becomes the DEFAULT; light "parchment" is preserved with a gold-shifted accent.
+  - **Three fonts, three registers** via `next/font/google` (self-hosted at build): Instrument Sans
+    for all UI, Newsreader italic for Otto's voice only (`.otto-voice`), IBM Plex Mono for technical
+    truth (paths, IDs, risk chips, `.section-label`). Radii 16/12/9.
+  - **Shell = four zones with one job each.** Nav grouped OPERATE/CONTEXT/SYSTEM with executive
+    labels over UNCHANGED routes (Home→Briefing, Projects→Missions, Skills→Agents,
+    Approvals→Decisions, People→Relationships, Integrations→Systems, History→Archive,
+    Agenda→Calendar); a persistent **command band** (Otto orb + live status line + composer with
+    autonomy segments mapping 1:1 to run modes + budget/systems vitals) that hands off to `/command`
+    via URL params; a **trust strip** closing every screen; the ambient rail (inline approve on mini
+    decision cards, live timeline, systems dots, counts footer). **Work modes** (Command/Focus/Deep)
+    collapse zones around attention — pure client state, ESC exits, approvals queue silently.
+  - **The Otto pulse stays real state, never decoration** — same `deriveOttoState` semantics, new
+    champagne-sphere rendering, status-line pairing, `aria-live` announcements, reduced-motion
+    degrades to color + label.
+  - **Decision card anatomy preserved field-for-field** (what/why/target/reversibility/diff/
+    technical details/note/Approve once/Deny/Cancel the run) with Modify as a relabel of the
+    existing edit hook, diff wells coloring +/− lines, amber card surface as the only amber-tinted
+    surface, and a/d keyboard shortcuts on the focused card.
+  - **Nothing fabricated.** Spec slots that need new backend fields (mission progress/milestone/
+    confidence, briefing synthesis grid, approvals Defer, people next-touch service) are OMITTED or
+    derived client-side from real fetched data only; they remain the spec's step-6 follow-up. The
+    prototype's stale "OpenAI/Ollama PLANNED" strip is superseded by the live provider/model/secrets
+    surfaces from ADR-018, restyled not removed.
+- **Consequences:** Every route, control, testid, and honesty line survives restyled; e2e specs
+  updated only where visible labels changed (palette search term, Decisions heading, mobile tab).
+  The redesign is reversible by reverting presentation files — no schema, API, or policy change
+  rides along.

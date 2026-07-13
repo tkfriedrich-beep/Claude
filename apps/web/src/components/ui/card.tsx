@@ -1,13 +1,11 @@
 import { cn } from "@/lib/utils";
 import type { HTMLAttributes } from "react";
 
+// OttoOS spec §01 geometry: card radius 16, hairlines carry depth — no shadows on cards.
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        "rounded-[14px] border border-line bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.04)]",
-        className,
-      )}
+      className={cn("rounded-[16px] border border-line-card bg-surface", className)}
       {...props}
     />
   );
@@ -25,9 +23,9 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-3 px-5 pt-4 pb-2", className)}>
+    <div className={cn("flex items-start justify-between gap-3 px-6 pt-5 pb-2", className)}>
       <div className="min-w-0">
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+        <h2 className="text-[16.5px] font-semibold tracking-[-0.01em]">{title}</h2>
         {subtitle ? <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p> : null}
       </div>
       {action}
@@ -36,5 +34,5 @@ export function CardHeader({
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 pb-4", className)} {...props} />;
+  return <div className={cn("px-6 pb-5", className)} {...props} />;
 }

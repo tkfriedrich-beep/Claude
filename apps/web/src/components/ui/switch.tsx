@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
+// OttoOS spec §03: 38×21 pill, ivory knob, gold when on. 200ms toggle, color-only hover.
 export function Switch({
   checked,
   onChange,
@@ -24,20 +25,20 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors",
+        "relative inline-flex h-[21px] w-[38px] shrink-0 items-center rounded-full border transition-colors duration-200",
         checked
           ? tone === "danger"
             ? "bg-danger border-danger"
             : "bg-accent border-accent"
-          : "bg-line border-line",
+          : "bg-line-control border-line-control",
         disabled && "opacity-50 pointer-events-none",
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "inline-block size-4.5 translate-x-0.5 rounded-full bg-white shadow transition-transform",
-          checked && "translate-x-[22px]",
+          "inline-block size-4 translate-x-[2px] rounded-full bg-ink shadow transition-transform duration-200",
+          checked && "translate-x-[18px]",
         )}
       />
     </button>

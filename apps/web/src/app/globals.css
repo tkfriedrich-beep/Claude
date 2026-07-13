@@ -1,62 +1,121 @@
 @import "tailwindcss";
 
-/* ---------- Design tokens (source of truth — see docs/UX_SPEC.md) ---------- */
+/* ---------- OttoOS design tokens (source of truth — see OttoOS Design Spec §01) ----------
+   Dark "midnight graphite" is the DEFAULT; light "parchment" is preserved with a
+   gold-shifted accent. Same custom-property names as before, plus the hairline/ink
+   ladders and the champagne-gold accent family. Toggle via data-theme on <html>. */
 
-:root {
-  /* light "parchment" */
-  --background: #f4f1ea;
-  --surface: #fbfaf7;
-  --surface-raised: #ffffff;
-  --ink: #1c1e1b;
-  --muted: #6f6b60;
-  --line: #e3ded2;
-  --accent: #12695b;
-  --accent-hover: #0d5044;
-  --accent-soft: #e3efe9;
-  --warn: #b97c10;
-  --warn-soft: #f6ecd7;
-  --danger: #a8452f;
-  --danger-soft: #f3e2dc;
-  --focus-ring: #12695b;
+:root,
+[data-theme="dark"] {
+  /* dark "midnight graphite" (default) */
+  --background: #141310;
+  --surface: #191712;
+  --surface-nav: #171511;
+  --surface-tile: #16140f;
+  --surface-raised: #1d1a15;
+  --surface-code: #12100c;
+  --ink: #ebe6d9;
+  --ink-soft: #cfc9b8;
+  --muted: #9b968a;
+  --muted-2: #8f8a7c;
+  --ink-faint: #6f6a5d;
+  --line: #2c2921;
+  --line-card: #2b2820;
+  --line-row: #24211b;
+  --line-control: #34301f;
+  --line-button: #4a4433;
+  --accent: #c9a961;
+  --accent-hover: #d9bc7d;
+  --accent-deep: #8a713c;
+  --on-accent: #171308;
+  --accent-soft: rgba(201, 169, 97, 0.11);
+  --accent-border: rgba(201, 169, 97, 0.35);
+  --warn: #d9a03c;
+  --warn-soft: rgba(217, 160, 60, 0.12);
+  --warn-surface: #1a170f;
+  --warn-border: rgba(217, 160, 60, 0.32);
+  --danger: #c96f57;
+  --danger-hover: #e08d75;
+  --danger-soft: #38201a;
+  --ok: #7fae91;
+  --diff-add: #a9c69a;
+  --focus-ring: #c9a961;
 }
 
-[data-theme="dark"] {
-  /* dark "midnight" */
-  --background: #131715;
-  --surface: #1a201d;
-  --surface-raised: #222925;
-  --ink: #eceae2;
-  --muted: #9a978c;
-  --line: #2d342f;
-  --accent: #4fb39b;
-  --accent-hover: #6cc5af;
-  --accent-soft: #1d312b;
-  --warn: #d9a03c;
-  --warn-soft: #33290f;
-  --danger: #c96f57;
-  --danger-soft: #38201a;
-  --focus-ring: #4fb39b;
+[data-theme="light"] {
+  /* light "parchment" (preserved; accent gold-shifted per spec §01) */
+  --background: #f4f1ea;
+  --surface: #fbfaf7;
+  --surface-nav: #f8f5ee;
+  --surface-tile: #f6f3ec;
+  --surface-raised: #ffffff;
+  --surface-code: #f1ede2;
+  --ink: #1c1e1b;
+  --ink-soft: #3c3e39;
+  --muted: #6f6b60;
+  --muted-2: #7c7869;
+  --ink-faint: #97927f;
+  --line: #e3ded2;
+  --line-card: #e3ded2;
+  --line-row: #eae5d9;
+  --line-control: #d8d2c0;
+  --line-button: #c6bfa8;
+  --accent: #8a6d34;
+  --accent-hover: #6f572a;
+  --accent-deep: #5a4621;
+  --on-accent: #fbfaf7;
+  --accent-soft: #efe7d4;
+  --accent-border: rgba(138, 109, 52, 0.4);
+  --warn: #b97c10;
+  --warn-soft: #f6ecd7;
+  --warn-surface: #faf3e3;
+  --warn-border: rgba(185, 124, 16, 0.35);
+  --danger: #a8452f;
+  --danger-hover: #8c3826;
+  --danger-soft: #f3e2dc;
+  --ok: #4e8a68;
+  --diff-add: #3f7d51;
+  --focus-ring: #8a6d34;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-nav: var(--surface-nav);
+  --color-tile: var(--surface-tile);
   --color-raised: var(--surface-raised);
+  --color-well: var(--surface-code);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-faint: var(--ink-faint);
   --color-line: var(--line);
+  --color-line-card: var(--line-card);
+  --color-line-row: var(--line-row);
+  --color-line-control: var(--line-control);
+  --color-line-button: var(--line-button);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-deep: var(--accent-deep);
+  --color-on-accent: var(--on-accent);
   --color-accent-soft: var(--accent-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-warn-surface: var(--warn-surface);
   --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
   --color-danger-soft: var(--danger-soft);
-  --font-sans: "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-  --radius-card: 14px;
-  --radius-control: 10px;
+  --color-ok: var(--ok);
+  --color-diff-add: var(--diff-add);
+  --font-sans: var(--font-instrument), "Instrument Sans", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-newsreader), "Newsreader", Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SF Mono", Menlo,
+    monospace;
+  --radius-card: 16px;
+  --radius-tile: 12px;
+  --radius-control: 9px;
 }
 
 html {
@@ -77,10 +136,29 @@ body {
 }
 
 ::selection {
+  background: rgba(201, 169, 97, 0.25);
+}
+[data-theme="light"] ::selection {
   background: var(--accent-soft);
 }
 
-/* ---------- Otto pulse (state-encoding motion; see UX_SPEC) ---------- */
+/* Otto's voice — the ONLY serif in the system (greeting, advisory answers, empty states). */
+.otto-voice {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+/* Mono section label — 10–11px uppercase, wide tracking (spec §01 typography). */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ---------- Otto pulse (state-encoding motion; spec §02 — never decoration) ---------- */
 
 .otto-orb {
   transform-origin: center;
@@ -88,17 +166,23 @@ body {
 .otto-idle .otto-core {
   animation: otto-breathe 6s ease-in-out infinite;
 }
+.otto-listening .otto-core {
+  animation: otto-breathe 2.2s ease-in-out infinite;
+}
 .otto-thinking .otto-ring-1 {
   animation: otto-orbit 2.6s linear infinite;
 }
 .otto-thinking .otto-ring-2 {
   animation: otto-orbit 3.9s linear infinite reverse;
 }
-.otto-acting .otto-sweep {
-  animation: otto-sweep 1.4s ease-in-out infinite;
+.otto-acting .otto-ring-1 {
+  animation: otto-orbit 1.05s linear infinite;
 }
 .otto-waiting .otto-core {
   animation: otto-heartbeat 1.6s ease-in-out infinite;
+}
+.otto-waiting .otto-alert {
+  animation: otto-alert 2.4s ease-in-out infinite;
 }
 .otto-completed .otto-core {
   animation: otto-resolve 0.9s ease-out 1;
@@ -108,37 +192,40 @@ body {
 }
 
 @keyframes otto-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.06); opacity: 1; }
+  0%, 100% { transform: scale(1); opacity: 0.88; }
+  50% { transform: scale(1.05); opacity: 1; }
 }
 @keyframes otto-orbit {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-@keyframes otto-sweep {
-  0% { stroke-dashoffset: 260; }
-  100% { stroke-dashoffset: -260; }
-}
 @keyframes otto-heartbeat {
   0%, 100% { transform: scale(1); }
-  12% { transform: scale(1.08); }
+  12% { transform: scale(1.07); }
   24% { transform: scale(1); }
-  36% { transform: scale(1.05); }
+  36% { transform: scale(1.04); }
   48% { transform: scale(1); }
 }
 @keyframes otto-resolve {
   0% { transform: scale(1); }
-  40% { transform: scale(1.18); opacity: 1; }
+  40% { transform: scale(1.16); opacity: 1; }
   100% { transform: scale(1); opacity: 0.9; }
 }
 @keyframes otto-alert {
-  0%, 100% { opacity: 0.55; }
+  0%, 100% { opacity: 0.45; }
   50% { opacity: 1; }
+}
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.fadeup {
+  animation: fadeup 0.3s ease-out;
 }
 
 /* The cockpit stays fully usable with motion off: state shows as color + label. */
 @media (prefers-reduced-motion: reduce) {
-  .otto-orb *, .animate-pulse, .animate-spin {
+  .otto-orb *, .animate-pulse, .animate-spin, .fadeup {
     animation: none !important;
   }
   * {
@@ -148,6 +235,10 @@ body {
 
 /* thin scrollbars for rails */
 .rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+* {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }

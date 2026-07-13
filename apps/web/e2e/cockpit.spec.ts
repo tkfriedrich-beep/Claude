@@ -68,7 +68,7 @@ test("home screen is keyboard accessible and passes axe", async ({ page }) => {
   // Cmd+K palette opens and navigates
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
-  await page.getByLabel("Palette search").fill("skills");
+  await page.getByLabel("Palette search").fill("agents"); // executive label for /skills
   await page.keyboard.press("Enter");
   await page.waitForURL("**/skills");
 

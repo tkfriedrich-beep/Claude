@@ -24,12 +24,12 @@ test("mobile home shows briefing with bottom tabs", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("mobile navigation reaches approvals and command", async ({ page }) => {
+test("mobile navigation reaches decisions and command", async ({ page }) => {
   await page.goto("/");
   const mobileNav = page.getByRole("navigation", { name: "Primary mobile" });
-  await mobileNav.getByRole("link", { name: /Approvals/ }).click();
+  await mobileNav.getByRole("link", { name: /Decisions/ }).click();
   await page.waitForURL("**/approvals");
-  await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Decisions" })).toBeVisible();
 
   await mobileNav.getByRole("link", { name: /Command/ }).click();
   await page.waitForURL("**/command");
