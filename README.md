@@ -37,6 +37,9 @@ make dev       # start control plane (http://localhost:8787) + web (http://local
 Open http://localhost:3000. Onboarding runs on first launch; choose **“Use demo data”** to explore
 everything without credentials. `make doctor` diagnoses missing prerequisites and configuration.
 
+**One-click launcher (macOS):** [`desktop/Otto.app`](desktop/README.md) boots both servers and
+opens the cockpit for you — drag it to your Desktop and double-click. `make app` rebuilds its icon.
+
 Other commands:
 
 ```bash

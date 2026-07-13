@@ -1,0 +1,92 @@
+#!/bin/bash
+# Otto — launches the AgenticOS Cockpit locally and opens it in your browser.
+# Self-contained: finds (or clones) the repo, sets it up on first run, starts both
+# servers, and opens http://localhost:3000. Quit the Terminal window to stop Otto.
+
+set -uo pipefail
+
+# GUI-launched apps get a minimal PATH — add the usual homes for uv / node / brew.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# Absolute path to this script (works before AND after the Terminal relaunch).
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+# First entry: relaunch inside Terminal.app so setup progress and logs are visible.
+if [ "${OTTO_IN_TERMINAL:-0}" != "1" ]; then
+  osascript >/dev/null 2>&1 <<OSA
+tell application "Terminal"
+  activate
+  do script "OTTO_IN_TERMINAL=1 " & quoted form of "$SELF"
+end tell
+OSA
+  exit 0
+fi
+
+say()  { printf "\n\033[1;36m▶ %s\033[0m\n" "$*"; }
+die()  { osascript -e "display alert \"Otto\" message \"$1\"" >/dev/null 2>&1; printf "\n\033[1;31m✖ %s\033[0m\n" "$1"; echo "Press any key to close…"; read -rn1; exit 1; }
+need() { command -v "$1" >/dev/null 2>&1; }
+is_repo() { [ -n "$1" ] && [ -f "$1/Makefile" ] && grep -q "AgenticOS Cockpit" "$1/Makefile" 2>/dev/null; }
+
+REPO_URL="https://github.com/tkfriedrich-beep/Claude.git"
+CFG="$HOME/.otto-repo"
+
+# 1) locate the repo -----------------------------------------------------------
+REPO="${COCKPIT_HOME:-}"
+# a) if this bundle still lives inside the repo (desktop/Otto.app/…), use that repo
+if [ -z "$REPO" ]; then
+  INPLACE="$(cd "$(dirname "$SELF")/../../../.." 2>/dev/null && pwd || true)"
+  is_repo "$INPLACE" && REPO="$INPLACE"
+fi
+# b) remembered choice
+[ -z "$REPO" ] && [ -f "$CFG" ] && REPO="$(cat "$CFG")"
+is_repo "$REPO" || REPO=""
+# c) common locations
+if [ -z "$REPO" ]; then
+  for c in "$HOME/Claude" "$HOME/Desktop/Claude" "$HOME/Developer/Claude" \
+           "$HOME/code/Claude" "$HOME/Documents/Claude" "$HOME/projects/Claude" "$HOME/src/Claude"; do
+    is_repo "$c" && { REPO="$c"; break; }
+  done
+fi
+
+# 2) offer to clone (or pick) if still not found -------------------------------
+if [ -z "$REPO" ]; then
+  CHOICE="$(osascript -e 'button returned of (display dialog "AgenticOS Cockpit isn'\''t set up on this Mac yet." buttons {"Choose folder…","Clone to ~/Claude"} default button "Clone to ~/Claude" with title "Otto")' 2>/dev/null || true)"
+  if [ "$CHOICE" = "Clone to ~/Claude" ]; then
+    need git || die "git is required. Install the Xcode Command Line Tools:  xcode-select --install"
+    say "Cloning AgenticOS Cockpit → ~/Claude (first time only)…"
+    git clone "$REPO_URL" "$HOME/Claude" || die "git clone failed — check your network and try again."
+    REPO="$HOME/Claude"
+  else
+    REPO="$(osascript -e 'POSIX path of (choose folder with prompt "Select your AgenticOS Cockpit folder (the one with the Makefile)")' 2>/dev/null || true)"
+    [ -n "$REPO" ] || exit 0
+  fi
+fi
+is_repo "$REPO" || die "That folder isn't the Cockpit repo (no Makefile)."
+echo "$REPO" > "$CFG"
+cd "$REPO" || die "Cannot enter $REPO"
+say "Using repo: $REPO"
+
+# 3) toolchain -----------------------------------------------------------------
+need uv   || die "Otto needs 'uv'.  Install:  curl -LsSf https://astral.sh/uv/install.sh | sh   then reopen Otto."
+need node || die "Otto needs Node.js 20+.  Install from https://nodejs.org  (or  brew install node)  then reopen Otto."
+need pnpm || { say "Enabling pnpm…"; corepack enable >/dev/null 2>&1 || npm i -g pnpm >/dev/null 2>&1 || true; }
+need pnpm || die "Otto needs 'pnpm'.  Install:  npm i -g pnpm   then reopen Otto."
+
+# 4) first-run setup + seed ----------------------------------------------------
+if [ ! -d "services/control-plane/.venv" ] || [ ! -d "node_modules" ]; then
+  say "First run — installing dependencies (a few minutes)…"
+  make setup || die "Setup failed — see the messages above."
+fi
+if [ ! -f "data/local/cockpit.db" ]; then
+  say "Seeding the demo workspace…"
+  make demo || true
+fi
+
+# 5) open the browser once the web is up, then run both servers (blocks) --------
+say "Starting Otto — the cockpit will open in your browser at http://localhost:3000"
+say "(Leave this Terminal window open while you use Otto; close it to quit.)"
+( for _ in $(seq 1 120); do
+    if curl -sf http://localhost:3000 >/dev/null 2>&1; then open "http://localhost:3000"; break; fi
+    sleep 1
+  done ) &
+exec make dev

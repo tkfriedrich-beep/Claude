@@ -3,7 +3,7 @@ SHELL := /bin/bash
 CP := services/control-plane
 WEB := apps/web
 
-.PHONY: setup dev demo test e2e lint format doctor contracts clean
+.PHONY: setup dev demo test e2e lint format doctor contracts clean app
 
 setup: ## Install all dependencies and migrate the local database
 	cd $(CP) && uv sync --extra dev
@@ -41,6 +41,11 @@ doctor: ## Diagnose environment and configuration
 contracts: ## Regenerate packages/contracts from the FastAPI OpenAPI schema
 	cd $(CP) && uv run python -m cockpit.export_openapi ../../packages/contracts/openapi.json
 	pnpm --filter @agenticos/contracts generate
+
+app: ## Rebuild the Otto.app launcher icon and make its launcher executable
+	uv run --with pillow python desktop/make_icon.py
+	chmod +x desktop/Otto.app/Contents/MacOS/Otto
+	@echo "desktop/Otto.app ready — drag it to your Desktop, then right-click → Open the first time."
 
 clean: ## Remove build artifacts (keeps data/local)
 	rm -rf $(WEB)/.next $(WEB)/node_modules node_modules $(CP)/.venv
