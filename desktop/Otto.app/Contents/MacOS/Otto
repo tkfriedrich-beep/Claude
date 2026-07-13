@@ -5,8 +5,10 @@
 
 set -uo pipefail
 
-# GUI-launched apps get a minimal PATH — add the usual homes for uv / node / brew.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# GUI-launched apps get a minimal PATH — add the usual homes for uv / node / pnpm / brew,
+# incl. the standalone pnpm install dir (~/Library/pnpm) so Otto finds pnpm however it was set up.
+export PNPM_HOME="${PNPM_HOME:-$HOME/Library/pnpm}"
+export PATH="$HOME/.local/bin:$PNPM_HOME:$HOME/Library/pnpm:$HOME/.local/share/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Absolute path to this script (works before AND after the Terminal relaunch).
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -23,7 +25,14 @@ OSA
 fi
 
 say()  { printf "\n\033[1;36m▶ %s\033[0m\n" "$*"; }
-die()  { osascript -e "display alert \"Otto\" message \"$1\"" >/dev/null 2>&1; printf "\n\033[1;31m✖ %s\033[0m\n" "$1"; echo "Press any key to close…"; read -rn1; exit 1; }
+die()  {
+  # Full (possibly multi-line) guidance goes to the Terminal; a one-line version to the popup
+  # (osascript alerts can't take raw newlines or stray quotes).
+  local one="${1//$'\n'/ }"; one="${one//\"/\'}"
+  osascript -e "display alert \"Otto\" message \"$one\"" >/dev/null 2>&1
+  printf "\n\033[1;31m✖ %s\033[0m\n\n" "$1"
+  echo "Press any key to close this window…"; read -rn1; exit 1
+}
 need() { command -v "$1" >/dev/null 2>&1; }
 is_repo() { [ -n "$1" ] && [ -f "$1/Makefile" ] && grep -q "AgenticOS Cockpit" "$1/Makefile" 2>/dev/null; }
 
@@ -67,10 +76,13 @@ cd "$REPO" || die "Cannot enter $REPO"
 say "Using repo: $REPO"
 
 # 3) toolchain -----------------------------------------------------------------
-need uv   || die "Otto needs 'uv'.  Install:  curl -LsSf https://astral.sh/uv/install.sh | sh   then reopen Otto."
-need node || die "Otto needs Node.js 20+.  Install from https://nodejs.org  (or  brew install node)  then reopen Otto."
-need pnpm || { say "Enabling pnpm…"; corepack enable >/dev/null 2>&1 || npm i -g pnpm >/dev/null 2>&1 || true; }
-need pnpm || die "Otto needs 'pnpm'.  Install:  npm i -g pnpm   then reopen Otto."
+need uv || die "$(printf 'Otto needs uv (the Python toolchain). Install it, then reopen Otto:\n\n  curl -LsSf https://astral.sh/uv/install.sh | sh')"
+need node || die "$(printf 'Otto needs Node.js 20 or newer. Install it, then reopen Otto:\n\n  Download: https://nodejs.org   (or, with Homebrew:  brew install node)')"
+if ! need pnpm; then
+  say "Enabling pnpm (bundled with Node via corepack)…"
+  corepack enable pnpm >/dev/null 2>&1 || corepack enable >/dev/null 2>&1 || true
+fi
+need pnpm || die "$(printf 'Otto needs pnpm. Pick ONE, then reopen Otto:\n\n  • corepack (ships with Node):  sudo corepack enable\n  • Homebrew:                    brew install pnpm\n  • Standalone (no admin):       curl -fsSL https://get.pnpm.io/install.sh | sh -\n\nAvoid  sudo npm i -g pnpm  — it leaves root-owned files that cause errors later.')"
 
 # 4) first-run setup + seed ----------------------------------------------------
 if [ ! -d "services/control-plane/.venv" ] || [ ! -d "node_modules" ]; then
