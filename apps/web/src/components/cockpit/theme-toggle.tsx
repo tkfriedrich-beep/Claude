@@ -20,15 +20,24 @@ export function applyTheme(theme: string) {
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<string>("system");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const saved = localStorage.getItem("cockpit-theme") ?? "system";
     setTheme(saved);
     applyTheme(saved);
   }, []);
 
+  // Reflect the DOM-resolved theme only AFTER mount. The pre-hydration theme script in layout
+  // already set data-theme on <html> (e.g. "dark") before React hydrates, but the server rendered
+  // the light default — reading the DOM during the first client render would make the icon +
+  // aria-label differ from the server HTML and trip a hydration mismatch. Gating on `mounted`
+  // keeps the server render and first client render identical; the real theme lands one tick later.
   const isDark =
-    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
+    mounted &&
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.theme === "dark";
 
   return (
     <button

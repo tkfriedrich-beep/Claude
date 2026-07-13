@@ -285,6 +285,28 @@ async def register_connector_resource(
     return connector
 
 
+@router.delete("/connectors/{slug}/resources/{name}", response_model=ConnectorOut)
+async def remove_connector_resource(
+    slug: str,
+    name: str,
+    workspace: Workspace = Depends(get_workspace),
+    session: AsyncSession = Depends(get_session),
+) -> Connector:
+    """Remove a registered n8n webhook (slug=n8n) or MCP server (slug=mcp) by name."""
+    connector = await get_connector(slug, workspace, session)
+    key = {"n8n": "webhooks", "mcp": "servers"}.get(slug)
+    if key is None:
+        raise HTTPException(400, f"Connector “{slug}” has no removable resources.")
+    items = list(connector.config.get(key, []))
+    kept = [item for item in items if item.get("name") != name]
+    if len(kept) == len(items):
+        raise HTTPException(404, f"No resource named “{name}” on “{slug}”.")
+    connector.config = {**connector.config, key: kept}
+    await get_registry().refresh_runtime_config(session, workspace.id)
+    await session.commit()
+    return connector
+
+
 def _reject_secretlike(config: dict[str, Any]) -> None:
     import json as _json
 

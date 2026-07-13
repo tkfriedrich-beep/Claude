@@ -30,6 +30,7 @@ from cockpit.schemas import (
     OnboardingRequest,
     PolicyCreateRequest,
     PolicyOut,
+    SecretPutRequest,
     SettingsPatchRequest,
 )
 from cockpit.workspace import get_workspace_settings, update_workspace_settings
@@ -72,11 +73,15 @@ async def onboarding(
         ws = Workspace(id=new_id("ws"), name=f"{body.user_name}'s Cockpit", settings={})
         session.add(ws)
         await session.flush()
+    else:
+        # Re-onboarding with a new name should re-title the workspace, not keep the old owner.
+        ws.name = f"{body.user_name}'s Cockpit"
 
     settings_patch: dict[str, Any] = {
         "safe_mode": body.safe_mode,
         "demo_mode": body.enable_demo_data,
         "provider": body.provider,
+        "model": body.model or "",
         "default_autonomy": body.default_autonomy,
     }
     if body.vault_path:
@@ -153,6 +158,25 @@ async def onboarding(
     return {"workspace_id": ws.id, "completed": True}
 
 
+def _provider_availability() -> dict[str, dict[str, Any]]:
+    """(available, detail) for every real provider, computed from its runtime — plus stubs.
+
+    Each runtime's ``available()`` never raises; a bad provider id still shouldn't 500 the
+    settings page, so we defend around it.
+    """
+    from cockpit.runtime import STUB_PROVIDERS, get_runtime
+
+    out: dict[str, dict[str, Any]] = {}
+    for pid in ("mock", "claude", "openai", "ollama"):
+        try:
+            ok, detail = get_runtime(pid).available()
+        except Exception as exc:  # never let provider probing break settings
+            ok, detail = False, str(exc)
+        out[pid] = {"available": ok, "detail": detail}
+    out.update({k: {"available": False, "detail": v} for k, v in STUB_PROVIDERS.items()})
+    return out
+
+
 @router.get("/settings")
 async def get_settings_endpoint(
     workspace: Workspace = Depends(get_workspace),
@@ -163,10 +187,6 @@ async def get_settings_endpoint(
         select(UserProfile).where(UserProfile.workspace_id == workspace.id)
     )
     registry = get_registry()
-    from cockpit.runtime import STUB_PROVIDERS
-    from cockpit.runtime.claude import ClaudeAgentRuntime
-
-    claude_ok, claude_detail = ClaudeAgentRuntime().available()
     return {
         "workspace_id": workspace.id,
         "user_name": profile.user_name if profile else None,
@@ -177,18 +197,66 @@ async def get_settings_endpoint(
         "theme": ws.theme,
         "default_mode": ws.default_mode,
         "provider": ws.provider,
+        "model": ws.model,
         "vault_path": ws.vault_path,
         "bizideas_path": ws.bizideas_path,
         "daily_budget_usd": ws.daily_budget_usd,
         "run_budget_usd": ws.run_budget_usd,
         "data_dir": str(get_settings().data_dir),
-        "providers": {
-            "mock": {"available": True, "detail": "Deterministic offline runtime."},
-            "claude": {"available": claude_ok, "detail": claude_detail},
-            **{k: {"available": False, "detail": v} for k, v in STUB_PROVIDERS.items()},
-        },
+        "providers": _provider_availability(),
         "skills_loaded": len(registry.skills),
     }
+
+
+@router.get("/providers")
+async def list_providers(
+    workspace: Workspace = Depends(get_workspace),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Rich provider catalog for the selector: availability, secret status, and model lists."""
+    from cockpit.runtime import get_runtime, ollama_runtime, openai_runtime
+    from cockpit.secrets import get_secret_store
+
+    ws = await get_workspace_settings(session, workspace.id)
+    store = get_secret_store()
+    avail = _provider_availability()
+
+    meta: dict[str, dict[str, str | None]] = {
+        "mock": {"name": "Demo runtime", "kind": "local", "secret": None},
+        "claude": {"name": "Claude", "kind": "cloud", "secret": None},
+        "openai": {"name": "OpenAI", "kind": "cloud", "secret": openai_runtime.API_KEY_NAME},
+        "ollama": {"name": "Ollama (local)", "kind": "local", "secret": None},
+    }
+
+    async def models_for(pid: str, is_available: bool) -> list[str]:
+        if pid == "openai":
+            return (
+                await openai_runtime.list_models()
+                if is_available
+                else list(openai_runtime.KNOWN_MODELS)
+            )
+        if pid == "ollama":
+            return await ollama_runtime.list_models() if is_available else []
+        return []
+
+    providers = []
+    for pid, m in meta.items():
+        info = avail.get(pid, {"available": False, "detail": ""})
+        secret_name = m["secret"]
+        providers.append(
+            {
+                "id": pid,
+                "name": m["name"],
+                "kind": m["kind"],
+                "available": info["available"],
+                "detail": info["detail"],
+                "requires_secret": secret_name,
+                "secret_configured": bool(secret_name and store.exists(secret_name)),
+                "models": await models_for(pid, info["available"]),
+                "default_model": getattr(get_runtime(pid), "default_model", ""),
+            }
+        )
+    return {"selected_provider": ws.provider, "selected_model": ws.model, "providers": providers}
 
 
 @router.patch("/settings")
@@ -203,6 +271,130 @@ async def patch_settings(
     await registry.refresh_runtime_config(session, workspace.id)
     await session.commit()
     return {"ok": True, "applied": patch}
+
+
+# ---------------------------------------------------------------- secrets
+
+# Well-known secret slots the UI always surfaces so a user knows what to configure. Values are
+# NEVER returned — only whether each name is set and where from (env wins over the local file).
+WELL_KNOWN_SECRETS: list[dict[str, str]] = [
+    {
+        "name": "OPENAI_API_KEY",
+        "description": "OpenAI API key — enables the OpenAI reasoning provider.",
+        "category": "provider",
+    },
+    {
+        "name": "ANTHROPIC_API_KEY",
+        "description": "Anthropic API key — one way to authenticate the Claude provider "
+        "(the local `claude` CLI login is the other).",
+        "category": "provider",
+    },
+    {
+        "name": "FIRECRAWL_API_KEY",
+        "description": "Firecrawl key — enables live web search in the Web Research connector.",
+        "category": "connector",
+    },
+]
+
+
+async def _referenced_secret_names(session: AsyncSession, workspace_id: str) -> dict[str, str]:
+    """secret_env names referenced by registered n8n webhooks → a description for each."""
+    from cockpit.models import Connector
+
+    out: dict[str, str] = {}
+    connector = await session.scalar(
+        select(Connector).where(Connector.workspace_id == workspace_id, Connector.slug == "n8n")
+    )
+    if connector is not None:
+        for hook in connector.config.get("webhooks", []):
+            name = hook.get("secret_env")
+            if name:
+                out[name] = f"HMAC secret for the n8n webhook “{hook.get('name', name)}”."
+    return out
+
+
+def _secret_slot(store: Any, name: str, description: str, category: str) -> dict[str, Any]:
+    source = (
+        store.source_of(name)
+        if hasattr(store, "source_of")
+        else ("env" if store.exists(name) else "none")
+    )
+    return {
+        "name": name,
+        "description": description,
+        "category": category,
+        "configured": source != "none",
+        "source": source,
+        "deletable": source == "file",  # env-provided secrets are unset in the shell, not here
+    }
+
+
+@router.get("/secrets")
+async def list_secrets(
+    workspace: Workspace = Depends(get_workspace),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    from cockpit.secrets import get_secret_store
+
+    store = get_secret_store()
+    slots: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for spec in WELL_KNOWN_SECRETS:
+        slots.append(_secret_slot(store, spec["name"], spec["description"], spec["category"]))
+        seen.add(spec["name"])
+
+    for name, description in (await _referenced_secret_names(session, workspace.id)).items():
+        if name not in seen:
+            slots.append(_secret_slot(store, name, description, "connector"))
+            seen.add(name)
+
+    # Any other file-backed names the user added directly.
+    for name in store.list_names():
+        if name not in seen:
+            slots.append(_secret_slot(store, name, "Custom secret.", "custom"))
+            seen.add(name)
+
+    return {"secrets": slots}
+
+
+@router.put("/secrets/{name}")
+async def put_secret(
+    name: str,
+    body: SecretPutRequest,
+    workspace: Workspace = Depends(get_workspace),
+) -> dict[str, Any]:
+    from cockpit.secrets import InvalidSecretName, get_secret_store
+
+    store = get_secret_store()
+    try:
+        store.set(name, body.value)
+    except InvalidSecretName as exc:
+        raise HTTPException(400, str(exc)) from exc
+    source = store.source_of(name) if hasattr(store, "source_of") else "file"
+    return {
+        "name": name,
+        "configured": True,
+        "source": source,
+        "shadowed_by_env": source == "env",  # a shell value still wins over what we just saved
+    }
+
+
+@router.delete("/secrets/{name}", status_code=204)
+async def delete_secret(
+    name: str,
+    workspace: Workspace = Depends(get_workspace),
+) -> None:
+    from cockpit.secrets import get_secret_store
+
+    store = get_secret_store()
+    source = store.source_of(name) if hasattr(store, "source_of") else "none"
+    if source == "env":
+        raise HTTPException(
+            409, f"“{name}” is set in the environment — unset it in your shell, not here."
+        )
+    if not store.delete(name):
+        raise HTTPException(404, f"No stored secret named “{name}”.")
 
 
 @router.get("/domains", response_model=list[DomainOut])

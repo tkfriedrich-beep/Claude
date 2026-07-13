@@ -325,3 +325,43 @@ are explicitly flagged **[deviation]**.
   regressions from round 2 are closed with tests that exercise the actual race/replay, not just the
   happy path. Remaining honest bound (THREAT_MODEL): true multi-process worker safety still needs a
   leased-claim protocol; the MVP ships single-process.
+
+## ADR-018 — OpenAI + Ollama runtimes, editable integrations, file-backed secrets **[capability]**
+
+- **Context:** The MVP shipped only the Claude and mock runtimes; OpenAI/Ollama/LangGraph were
+  honest stubs. Users also needed to add/edit integrations and store API keys from the UI without
+  those secrets ever touching the database. (OpenAI OAuth was requested but OpenAI's public API is
+  API-key only, so we ship key auth.)
+- **Decision:**
+  - **Two real runtimes behind the existing `AgentRuntime` contract.** `OpenAIAgentRuntime`
+    (Chat Completions, streamed, usage+cost captured) and `OllamaAgentRuntime` (local `/api/chat`,
+    streamed, free) share an `HTTPChatRuntime` base that keeps a per-session transcript in memory
+    (these APIs are stateless — no server session to resume; a restart honestly starts fresh rather
+    than pretending to remember). Both are removed from `STUB_PROVIDERS`; only `langgraph` remains a
+    stub. `get_runtime` is now a small factory map, still one singleton per provider so
+    interrupt/cancel reach the live instance.
+  - **Text-only reasoning engines in the MVP.** Neither new runtime exposes tools to the model, so a
+    model turn can produce words but never an external effect — tool use stays with skills/connectors
+    behind the policy gateway (consistent with ADR-011/013). The `can_use_tool` bridge is accepted
+    for interface parity and unused.
+  - **`LocalSecretStore` — file-backed, env wins.** Secrets are read env-first, then from a
+    gitignored `data/local/secrets.env` written atomically at mode 0600. Values never enter SQLite,
+    logs, or run events (invariant preserved); the secrets API is write-only + list-names + delete
+    and never returns a value. A shell-exported value shadows the file and cannot be deleted through
+    the API (you unset it in the shell). Cost is a best-effort estimate from a per-model price table;
+    provider token counts remain authoritative.
+  - **Providers/models + secrets APIs; editable integrations.** `GET /providers` reports
+    availability, secret status, and model lists (Ollama models are discovered live via `/api/tags`;
+    OpenAI offers a curated list plus live enumeration when a key is present). `model` is stored in
+    workspace settings (JSON column — no migration) and flows to the runtime via `SessionContext`.
+    Connector resources gained a `DELETE /connectors/{slug}/resources/{name}` so registered n8n
+    webhooks / MCP servers can be removed, complementing the existing enable/disable + config edit.
+  - **Onboarding re-titles the workspace** on re-onboard (fixes the stale "Alex's Cockpit" name).
+- **Consequences:** The cockpit is genuinely provider-independent and self-serviceable: pick a
+  provider and model, paste a key that stays on disk at 0600, wire and unwire connectors — all from
+  the UI, with the policy gateway still the only thing that authorizes real actions. Verified end to
+  end (secret written 0600 and absent from the DB; provider flips available once keyed; webhook
+  add→remove; model persists) plus 24 new unit/integration tests (`respx`-mocked OpenAI/Ollama
+  streams, secret-store round-trip, providers/secrets/resource APIs). Honest bound: without a
+  provider key or a local Ollama, those providers report `needs setup` and the cockpit stays on the
+  offline demo runtime.

@@ -87,12 +87,15 @@ export default function SettingsPage() {
             </Select>
           </SettingRow>
           <SettingRow title="Reasoning provider"
-                      description={settings.providers[settings.provider]?.detail ?? ""}>
+                      description={settings.providers[settings.provider]?.detail
+                        ?? "Pick who does the thinking. Keys & models live in Integrations."}>
             <Select value={settings.provider}
-                    onChange={(e) => patch.mutate({ provider: e.target.value })}
+                    onChange={(e) => patch.mutate({ provider: e.target.value, model: "" })}
                     aria-label="Provider">
               <option value="mock">Demo runtime</option>
               <option value="claude">Claude</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama (local)</option>
             </Select>
           </SettingRow>
         </CardBody>
