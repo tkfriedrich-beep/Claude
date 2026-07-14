@@ -36,6 +36,25 @@ test("mobile navigation reaches decisions and command", async ({ page }) => {
   await expect(page.getByTestId("command-composer")).toBeVisible();
 });
 
+test("mobile keeps Safe Mode and Settings one tap away (R4-F3)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("greeting")).toBeVisible({ timeout: 30_000 });
+
+  // Emergency Safe Mode is reachable in the phone command band (desktop nav is hidden < lg).
+  const safe = page.getByTestId("safe-mode-pill-mobile");
+  await expect(safe).toBeVisible();
+  await expect(safe).toContainText("Safe Mode on");
+
+  // Settings (and the rest of the roster) is reachable via the "More" system menu.
+  const mobileNav = page.getByRole("navigation", { name: "Primary mobile" });
+  await mobileNav.getByRole("button", { name: /More/ }).click();
+  const sheet = page.getByRole("dialog", { name: "System menu" });
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole("link", { name: "Settings" }).click();
+  await page.waitForURL("**/settings");
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+});
+
 test("mobile screenshots for the record", async ({ page }) => {
   const dir = path.join(repoRoot, "docs", "screenshots");
   fs.mkdirSync(dir, { recursive: true });

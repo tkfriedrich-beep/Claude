@@ -2,6 +2,9 @@
 
 // ⌘K universal command (OttoOS spec §05): GO TO (12 destinations) · RUN (agents) ·
 // CONTROL (Safe Mode, theme) · MODE (Focus / Deep Work) — filterable, never required.
+// A proper modal: focus is trapped inside and restored to the opener on close (F10).
+// RUN mirrors the Agents roster's launch gates — required-input skills open their form,
+// disabled skills are labeled, nothing fails silently (F5).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -41,7 +44,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const { setMode } = useWorkMode();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
 
   const { data: skills } = useQuery({ queryKey: ["skills"], queryFn: api.skills, enabled: open });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: api.settings, enabled: open });
@@ -60,16 +66,26 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       label,
       run: () => router.push(href),
     }));
+    // Mirror the roster's launch capability: only enabled, zero-required-input skills run
+    // from here; anything else opens its detail form instead of manufacturing a failed run.
     const agents: PaletteAction[] = (skills ?? []).map((skill) => {
       const meta = agentMetaFor(skill.slug, skill.name);
+      const needsInput = Boolean(
+        ((skill.manifest?.input_schema as { required?: string[] })?.required ?? []).length,
+      );
+      const runnable = skill.enabled && !needsInput;
       return {
         id: `skill:${skill.slug}`,
         kind: "RUN" as const,
         label: `${meta.name} — ${skill.name}`,
-        hint: skill.risk_level,
-        run: async () => {
-          await runSkill.mutateAsync(skill.slug);
-        },
+        hint: !skill.enabled ? "disabled" : needsInput ? "needs input →" : skill.risk_level,
+        run: runnable
+          ? async () => {
+              await runSkill.mutateAsync(skill.slug);
+            }
+          : () => {
+              router.push(`/skills/${skill.slug}`);
+            },
       };
     });
     const control: PaletteAction[] = [
@@ -111,13 +127,56 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       .slice(0, 14);
   }, [actions, query]);
 
+  // Modal lifecycle: reset state + focus the search on open; restore focus to the opener on
+  // close (the cleanup runs when `open` flips false). Capture the opener BEFORE focusing input.
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 10);
-    }
+    if (!open) return;
+    restoreRef.current = (document.activeElement as HTMLElement) ?? null;
+    setQuery("");
+    setIndex(0);
+    setError(null);
+    const t = setTimeout(() => inputRef.current?.focus(), 10);
+    return () => {
+      clearTimeout(t);
+      restoreRef.current?.focus?.();
+    };
   }, [open]);
+
+  // Run an action; keep the modal open with an inline error if it throws (F5).
+  const invoke = async (action: PaletteAction) => {
+    try {
+      setError(null);
+      await action.run();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message || "That action failed. Try again.");
+    }
+  };
+
+  // Trap Tab/Shift+Tab inside the dialog so focus can't reach the page behind it (F10).
+  const onDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const root = dialogRef.current;
+    if (!root) return;
+    const focusables = Array.from(
+      root.querySelectorAll<HTMLElement>('input, button, [href], [tabindex]:not([tabindex="-1"])'),
+    ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (e.shiftKey && (active === first || !root.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   if (!open || typeof document === "undefined") return null;
 
@@ -125,9 +184,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12dvh]">
       <button aria-label="Close palette" tabIndex={-1} className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        onKeyDown={onDialogKeyDown}
         className="relative w-full max-w-xl overflow-hidden rounded-[16px] border border-line-button bg-surface shadow-[0_24px_80px_rgba(0,0,0,.6)]"
       >
         <div className="flex items-center gap-3 border-b border-line-card px-5 py-3.5">
@@ -143,10 +204,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(i + 1, filtered.length - 1)); }
               if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
               if (e.key === "Enter" && filtered[index]) {
-                filtered[index].run();
-                onClose();
+                e.preventDefault();
+                void invoke(filtered[index]);
               }
-              if (e.key === "Escape") onClose();
             }}
             placeholder="Go to, run an agent, toggle a control…"
             aria-label="Palette search"
@@ -154,6 +214,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           />
           <span className="font-mono text-[11px] text-faint">ESC</span>
         </div>
+        {error ? (
+          <p role="alert" className="border-b border-line-card px-5 py-2.5 text-[12.5px] text-danger">
+            {error}
+          </p>
+        ) : null}
         <ul className="max-h-[46dvh] overflow-y-auto p-2" role="listbox">
           {filtered.length === 0 ? (
             <li className="otto-voice px-3 py-4 text-[15px] text-muted">Nothing matches “{query}”.</li>
@@ -166,10 +231,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                     i === index ? "bg-accent-soft text-ink" : "text-ink-soft hover:bg-accent-soft/50",
                   )}
                   onMouseEnter={() => setIndex(i)}
-                  onClick={() => {
-                    action.run();
-                    onClose();
-                  }}
+                  onClick={() => void invoke(action)}
                 >
                   <span className="w-16 shrink-0 font-mono text-[10.5px] tracking-[0.08em] text-faint">
                     {action.kind}

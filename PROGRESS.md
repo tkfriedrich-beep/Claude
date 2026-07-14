@@ -337,3 +337,32 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
       decisions, systems, settings, archive screenshots verified)
 - [ ] Spec step-6 backend follow-ups: approvals defer, mission progress/milestone/confidence,
       briefing synthesis fields, people next_touch service-side
+
+### M8 — Codex review R4: safety/honesty/a11y fixes (ADR-020) — ✅ (2026-07-14)
+
+- [x] F1 (Critical): network guard — `cockpit/netguard.py` + outermost middleware reject any
+      non-loopback, non-tailnet client with 403 before routing; `COCKPIT_TRUSTED_NETWORKS`
+      (default `100.64.0.0/10`); Makefile/launcher/README/RUNBOOK rewritten (guard, not bind
+      address, is the boundary). Residual: per-device token is a documented follow-up.
+- [x] F2 (Critical): dropped the per-command "In-policy"/allowlist segment — honest three modes
+      (Advise/Draft/Execute) map 1:1 to `read_only|draft|act`; allowlisting lives only in agent
+      autonomy + Settings → Policies; command copy no longer over-promises.
+- [x] F3 (High): shared `SafeModePill` in nav + always-visible band (`safe-mode-pill-mobile`);
+      mobile "More" is now a system sheet incl. Settings — Safe Mode + Settings one tap on a phone.
+- [x] F4 (High): quote-aware `tokenizeCommand()` splits MCP stdio into command+args (no shell).
+- [x] F5 (High): ⌘K RUN mirrors the roster's launch gates — required-input → form, disabled
+      labeled, failures keep the palette open with an inline error.
+- [x] F6 (High): band/trust-strip/rail disclose loading/unavailable instead of fabricating
+      healthy budget/systems/provider/Safe-Mode/idle state; on/off contradiction resolved.
+- [x] F7 (Medium): honest Deep Work copy ("active work keeps running").
+- [x] F8 (Medium): Settings theme control reads localStorage after mount (no hydration mismatch).
+- [x] F9 (Medium): faint/muted/amber tokens raised to WCAG AA (deterministic contrast test);
+      full per-route Axe color-contrast sweep deferred (design pass) — documented in ADR-020.
+- [x] F10 (Medium): ⌘K modal traps + restores focus.
+- [x] F11 (Medium): `SegmentedControl` + autonomy ladder implement the WAI-ARIA radio keyboard
+      pattern (roving tabIndex + Arrow/Home/End) via shared `handleRadioKeys`.
+- [x] F12 (Low): `home-composer` restored as a compatibility testid on the band composer.
+- [x] Gates: control-plane pytest **188 passed** (+17 netguard), ruff + mypy clean; web tsc +
+      eslint clean; vitest **24 passed** (+18: tokenizer, radio keys, segmented keyboard,
+      token contrast); `next build` 16/16; Playwright **12 passed** (desktop + mobile, incl.
+      new F3/F5/F12 regressions; mobile no-overflow holds with the added band pill).

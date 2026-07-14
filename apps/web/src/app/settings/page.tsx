@@ -3,7 +3,7 @@
 // Settings: appearance, safety (Safe Mode + kill switch), budgets, storage/export,
 // memory review, domain permissions, policy editor (the ONLY place for allow rules).
 // OttoOS restyle — same endpoints, mutations, and testids; presentation only.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -369,11 +369,14 @@ function SettingRow({ title, description, children, danger }: {
 
 // Theme preference is local (applied to <html data-theme>) — values dark/light/system.
 function ThemeControl() {
-  const [theme, setTheme] = useState<ThemeChoice>(() => {
-    if (typeof window === "undefined") return "system";
+  // Initialize to a server-stable value; read the stored preference only AFTER mount so the
+  // first client render matches the SSR HTML (no hydration mismatch — same reason ThemeToggle
+  // gates on mount rather than reading localStorage during the initial render).
+  const [theme, setTheme] = useState<ThemeChoice>("system");
+  useEffect(() => {
     const saved = localStorage.getItem("cockpit-theme");
-    return saved === "dark" || saved === "light" || saved === "system" ? saved : "system";
-  });
+    if (saved === "dark" || saved === "light" || saved === "system") setTheme(saved);
+  }, []);
   return (
     <SegmentedControl<ThemeChoice>
       options={THEME_OPTIONS}

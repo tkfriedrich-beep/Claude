@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Connector, ProviderInfo, SecretSlot } from "@/lib/types";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn, timeAgo, tokenizeCommand } from "@/lib/utils";
 import { Badge, RiskBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -534,13 +534,20 @@ function AddResourceDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [readOnly, setReadOnly] = useState(false);
 
   const register = useMutation({
-    mutationFn: () =>
-      api.registerConnector(
+    mutationFn: () => {
+      // Split the stdio command into executable + argv (the backend spawns them directly,
+      // no shell) so `npx -y pkg /path` registers as command:"npx", args:[…] rather than a
+      // single unrunnable binary name.
+      const tokens = tokenizeCommand(command.trim());
+      return api.registerConnector(
         kind === "mcp_server"
-          ? { kind, name, transport: command ? "stdio" : "inproc", command: command || undefined }
+          ? tokens.length > 0
+            ? { kind, name, transport: "stdio", command: tokens[0], args: tokens.slice(1) }
+            : { kind, name, transport: "inproc" }
           : { kind, name, url, secret_env: secretEnv || undefined, read_only: readOnly,
               supports_dry_run: true },
-      ),
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
       onClose();
@@ -566,8 +573,8 @@ function AddResourceDialog({ open, onClose }: { open: boolean; onClose: () => vo
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-tools" />
         </Field>
         {kind === "mcp_server" ? (
-          <Field label="stdio command (optional)"
-                 hint="Leave empty to register the built-in in-process demo server. Discovered tools default to approval-required.">
+          <Field label="stdio command + arguments (optional)"
+                 hint="Executable and its arguments, space-separated (quotes respected) — e.g. npx -y @modelcontextprotocol/server-filesystem /path. Leave empty for the built-in in-process demo server. Discovered tools default to approval-required.">
             <Input value={command} onChange={(e) => setCommand(e.target.value)}
                    placeholder="npx -y @modelcontextprotocol/server-filesystem /path" />
           </Field>

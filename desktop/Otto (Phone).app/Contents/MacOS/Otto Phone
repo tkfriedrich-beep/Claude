@@ -110,7 +110,7 @@ if [ -n "$TS_IP" ]; then
 else
   gold "$(printf '📱  On your phone, open:  http://<this-Mac-Tailscale-IP>:3000\n    Find the IP (looks like 100.x.y.z) in the Tailscale menu-bar app.\n    If Tailscale isn'\''t installed/running yet, start it, then reopen this app.')"
 fi
-say "This Mac can also use http://localhost:3000. Keep Safe Mode ON. Leave this window open; close it to quit."
+say "This Mac can also use http://localhost:3000. Only localhost + your tailnet can reach Otto (a random Wi-Fi neighbor gets 403). Keep Safe Mode ON. Leave this window open; close it to quit."
 
 # Open the cockpit on the Mac too, once the web server answers.
 ( for _ in $(seq 1 120); do

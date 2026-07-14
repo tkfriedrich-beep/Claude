@@ -27,11 +27,14 @@ want to reach the cockpit right now.
 config: the UI derives the control-plane address from the host you loaded, and CORS already
 allows tailnet origins.
 
-**Security:** this makes the *unauthenticated* control plane reachable to anything on that
-network. Keep **Safe Mode ON** (external writes stay blocked; every action is approval-gated).
-Do **not** run `tailscale funnel` on these ports — that would publish Otto to the public
-internet. See `docs/RUNBOOK.md` → "View on your phone (Tailscale)" for the tailnet-only option
-(`make phone PHONE_HOST=100.x.y.z`).
+**Security:** the control plane stays single-user and unauthenticated, so it is guarded at the
+network edge — it only answers **localhost and your own Tailscale tailnet** (100.64.0.0/10).
+A random host on the same Wi-Fi that hits the port gets `403`, not your data (CORS can't stop a
+non-browser client; the guard can). Still keep **Safe Mode ON** (external writes stay blocked;
+every action is approval-gated). Do **not** run `tailscale funnel` on these ports — that would
+publish Otto to the public internet. For a hard socket-level tailnet bind use
+`make phone PHONE_HOST=100.x.y.z`; to allow a trusted LAN set `COCKPIT_TRUSTED_NETWORKS`
+(see `docs/RUNBOOK.md` → "View on your phone (Tailscale)").
 
 ## What it does on click
 

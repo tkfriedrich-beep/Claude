@@ -18,7 +18,9 @@
   --ink-soft: #cfc9b8;
   --muted: #9b968a;
   --muted-2: #8f8a7c;
-  --ink-faint: #6f6a5d;
+  /* faint carries state text (section labels, timestamps, trust strip) — held at WCAG AA
+     (≥4.5:1) against the lightest dark surface (--surface-raised). See DECISIONS ADR-020 / R4-F9. */
+  --ink-faint: #8a8373;
   --line: #2c2921;
   --line-card: #2b2820;
   --line-row: #24211b;
@@ -53,8 +55,10 @@
   --ink: #1c1e1b;
   --ink-soft: #3c3e39;
   --muted: #6f6b60;
-  --muted-2: #7c7869;
-  --ink-faint: #97927f;
+  /* muted-2 + faint carry small state text; darkened to WCAG AA (≥4.5:1) on --background.
+     See DECISIONS ADR-020 / R4-F9. */
+  --muted-2: #706d5f;
+  --ink-faint: #716d5c;
   --line: #e3ded2;
   --line-card: #e3ded2;
   --line-row: #eae5d9;
@@ -66,7 +70,9 @@
   --on-accent: #fbfaf7;
   --accent-soft: #efe7d4;
   --accent-border: rgba(138, 109, 52, 0.4);
-  --warn: #b97c10;
+  /* amber text on amber-surface must stay legible: held at WCAG AA on --warn-surface + --background.
+     See DECISIONS ADR-020 / R4-F9. */
+  --warn: #93630d;
   --warn-soft: #f6ecd7;
   --warn-surface: #faf3e3;
   --warn-border: rgba(185, 124, 16, 0.35);

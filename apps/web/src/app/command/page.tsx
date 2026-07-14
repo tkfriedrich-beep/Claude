@@ -21,18 +21,17 @@ import { RunTimeline } from "@/components/cockpit/run-timeline";
 import { ArtifactList } from "@/components/cockpit/artifact-list";
 import { OctagonX, Pause, Play, RotateCcw } from "lucide-react";
 
-// Autonomy segments map 1:1 to run modes (spec §03); In-policy = act within the
-// allowlist — the policy gateway still decides, exactly as before.
+// Execution modes map 1:1 to the API's run modes (spec §03). There is deliberately no
+// per-command "allowlist"/"in-policy" toggle: whether an allow-listed tool runs without
+// approval is a property of the agent's persisted autonomy (level 5) plus Settings →
+// Policies — a mode label must never silently raise effective autonomy.
 const AUTONOMY = [
   { value: "read_only", label: "Advise" },
   { value: "draft", label: "Draft" },
-  { value: "act", label: "Execute + approval" },
-  { value: "allowlist", label: "In-policy" },
+  { value: "act", label: "Execute" },
 ] as const;
-type Autonomy = (typeof AUTONOMY)[number]["value"];
 type CommandMode = "read_only" | "draft" | "act";
-const modeFor = (autonomy: Autonomy): CommandMode =>
-  autonomy === "allowlist" ? "act" : autonomy;
+type Autonomy = CommandMode;
 
 const RISK_ORDER = ["R0", "R1", "R2", "R3", "R4"];
 
@@ -160,7 +159,7 @@ function CommandInner() {
     if (validMode) setAutonomy(validMode);
     if (prefill) setText(prefill);
     if (searchParams.get("autosubmit") === "1" && prefill) {
-      submitMutate({ text: prefill, mode: validMode ?? modeFor(autonomy) });
+      submitMutate({ text: prefill, mode: validMode ?? autonomy });
     } else {
       // preview=1 (or bare prefill): hand the cursor to the composer, caret at end
       requestAnimationFrame(() => {
@@ -175,7 +174,7 @@ function CommandInner() {
   }, [searchParams, router, sessionId, submitMutate, autonomy]);
 
   const sendCurrent = () => {
-    if (text.trim()) submitMutate({ text, mode: modeFor(autonomy) });
+    if (text.trim()) submitMutate({ text, mode: autonomy });
   };
 
   return (
@@ -235,8 +234,9 @@ function CommandInner() {
         <header>
           <h1 className="text-[26px] font-semibold tracking-[-0.01em]">Command</h1>
           <p className="mt-1 text-[14px] text-muted-2">
-            Natural language in, governed execution out. Consequential work shows its plan;
-            nothing external runs without your approval.
+            Natural language in, governed execution out. Consequential work shows its plan, and
+            external writes pause for your approval — unless you&apos;ve allow-listed a tool in
+            Settings → Policies.
           </p>
         </header>
 

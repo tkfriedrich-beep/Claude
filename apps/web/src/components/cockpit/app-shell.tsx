@@ -7,12 +7,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Calendar, CheckSquare, Clock, Home, MessageSquare } from "lucide-react";
+import { Activity, Calendar, CheckSquare, Home, MessageSquare, MoreHorizontal, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { ActivityRail } from "@/components/cockpit/activity-rail";
-import { CommandBand, TrustStrip } from "@/components/cockpit/command-band";
+import { CommandBand, SafeModePill, TrustStrip } from "@/components/cockpit/command-band";
 import { CommandPalette } from "@/components/cockpit/command-palette";
 import { ThemeToggle, applyTheme } from "@/components/cockpit/theme-toggle";
 import { useWorkMode, WorkModeProvider } from "@/components/cockpit/work-mode";
@@ -38,12 +38,23 @@ const NAV_SYSTEM = [
   { href: "/settings", label: "Settings" },
 ];
 
-const MOBILE_NAV = [
+const MOBILE_TABS = [
   { href: "/", label: "Briefing", icon: Home },
   { href: "/command", label: "Command", icon: MessageSquare },
   { href: "/approvals", label: "Decisions", icon: CheckSquare },
   { href: "/agenda", label: "Calendar", icon: Calendar },
-  { href: "/history", label: "More", icon: Clock },
+];
+// Everything not on the four bottom tabs — reachable on a phone via the "More" system sheet so
+// Settings (and the rest of the roster) is one tap from every viewport (F3).
+const MORE_DESTINATIONS = [
+  { href: "/projects", label: "Missions" },
+  { href: "/skills", label: "Agents" },
+  { href: "/people", label: "Relationships" },
+  { href: "/knowledge", label: "Knowledge" },
+  { href: "/automations", label: "Automations" },
+  { href: "/integrations", label: "Systems" },
+  { href: "/history", label: "Archive" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -61,6 +72,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const { mode } = useWorkMode();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const { data: onboarding, isLoading } = useQuery({
     queryKey: ["onboarding"],
@@ -108,13 +120,17 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, onboarding, pathname, router]);
 
+  // Close the mobile system menu on any route change.
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
+
   if (pathname === "/onboarding") {
     return <>{children}</>;
   }
 
   const pendingCount = approvals?.length ?? 0;
   const navHidden = mode !== "command";
-  const safeOn = settings?.safe_mode ?? true;
   const initials = (onboarding?.user_name ?? "?")
     .split(/\s+/)
     .map((w) => w[0])
@@ -190,22 +206,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         {renderGroup("Context", NAV_CONTEXT)}
         {renderGroup("System", NAV_SYSTEM)}
         <div className="mt-auto space-y-3 px-2.5 pt-5">
-          <button
-            onClick={() => toggleSafe.mutate()}
-            data-testid="safe-mode-pill"
-            className={cn(
-              "flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-[10.5px] font-medium tracking-[0.06em]",
-              safeOn
-                ? "border-(--accent-border) text-accent-hover"
-                : "border-(--warn-border) text-warn",
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn("size-[7px] rounded-full", safeOn ? "bg-accent" : "bg-warn")}
-            />
-            {safeOn ? "Safe Mode on" : "Safe Mode off"}
-          </button>
+          <SafeModePill
+            settings={settings}
+            isPending={toggleSafe.isPending}
+            onToggle={() => toggleSafe.mutate()}
+            testid="safe-mode-pill"
+          />
           <div className="flex items-center gap-2.5 border-t border-line pt-3.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line-button font-mono text-[11px] text-ink-soft">
               {initials}
@@ -246,12 +252,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       {/* right ambient rail (desktop ≥ xl; toggleable drawer below; collapses in Deep Work) */}
       <ActivityRail open={railOpen} onToggle={() => setRailOpen((o) => !o)} />
 
-      {/* mobile bottom tabs */}
+      {/* mobile bottom tabs — four primary + a "More" system menu */}
       <nav
         aria-label="Primary mobile"
         className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-nav/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
-        {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
+        {MOBILE_TABS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link
@@ -275,7 +281,53 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          className={cn(
+            "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px]",
+            moreOpen || MORE_DESTINATIONS.some((d) => pathname === d.href)
+              ? "text-accent-hover"
+              : "text-muted",
+          )}
+        >
+          <MoreHorizontal className="size-5" />
+          More
+        </button>
       </nav>
+
+      {/* mobile system menu — Settings, Systems, Automations, and the rest of the roster (F3) */}
+      {moreOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="System menu">
+          <button
+            aria-label="Close system menu"
+            tabIndex={-1}
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMoreOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-[16px] border-t border-line bg-surface px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-4 shadow-[0_-16px_40px_rgba(0,0,0,.4)]">
+            <div className="flex items-center justify-between">
+              <span className="section-label">System menu</span>
+              <button aria-label="Close system menu" onClick={() => setMoreOpen(false)} className="text-muted">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {MORE_DESTINATIONS.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMoreOpen(false)}
+                  className="rounded-[11px] border border-line-row bg-tile px-4 py-3 text-[14px] font-medium text-ink-soft hover:text-ink"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       {/* activity toggle for < xl screens */}

@@ -40,6 +40,13 @@ class Settings(BaseSettings):
         r"|([a-zA-Z0-9-]+\.)+ts\.net"  # Tailscale MagicDNS names
         r")(:\d+)?$"
     )
+    # Network access guard (see cockpit/netguard.py). Loopback is always allowed; these
+    # comma-separated CIDRs are the ONLY other clients that may reach the (unauthenticated)
+    # API when the socket is bound to a reachable interface (`make phone`). Default = the
+    # Tailscale CGNAT range, so a random LAN host cannot hit the API even though CORS would
+    # let a browser through. Set COCKPIT_TRUSTED_NETWORKS="0.0.0.0/0,::/0" to allow all
+    # (opt-in, e.g. a trusted LAN), or "" to allow loopback only.
+    trusted_networks: str = "100.64.0.0/10"
 
     safe_mode_default: bool = True
     daily_budget_usd: float = 5.0

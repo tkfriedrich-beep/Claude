@@ -84,20 +84,24 @@ The cockpit is local-first, but you can reach it from your phone over a private
    name is `toms-imac.<your-tailnet>.ts.net`, or use its `100.x.y.z` tailnet IP.
 2. On the Mac, start Otto bound to a reachable interface:
    ```bash
-   make phone            # binds to all interfaces (LAN + tailnet)
-   # or, tailnet-ONLY (not reachable on your home Wi-Fi):
+   make phone            # opens the socket on all interfaces, but the API is tailnet-guarded
+   # or, hard socket-level tailnet bind (not even listening on your home Wi-Fi):
    make phone PHONE_HOST=100.x.y.z    # your Mac's Tailscale IP
    ```
 3. On your phone's browser, open **`http://toms-imac.<your-tailnet>.ts.net:3000`**
    (or `http://100.x.y.z:3000`). That's it — the UI derives the control-plane URL from the
    host you loaded, and CORS already allows tailnet origins, so no per-device config is needed.
 
-**Security:** `make phone` makes the *unauthenticated* control plane reachable to anything on
-that network. Keep **Safe Mode ON** (external writes stay blocked; every action is still
-approval-gated). Do **not** run `tailscale funnel` on these ports — that would publish Otto to
-the public internet. Prefer `PHONE_HOST=<tailscale-ip>` to keep it off your local Wi-Fi. For
-HTTPS with a real cert, `tailscale serve` is an option but needs both ports proxied under one
-name (out of scope here).
+**Security:** the control plane stays single-user and unauthenticated, so a **network guard**
+(`cockpit/netguard.py`) is the access boundary: it answers **localhost + your Tailscale tailnet
+only** (`100.64.0.0/10`). A random host on the same Wi-Fi that reaches the port gets `403` — CORS
+can't stop a non-browser client, but the guard can. `make phone` on `0.0.0.0` is therefore safe
+by default; `PHONE_HOST=<tailscale-ip>` additionally stops the socket from even listening on
+Wi-Fi. To deliberately allow a trusted LAN, set `COCKPIT_TRUSTED_NETWORKS` (comma-separated
+CIDRs; `"0.0.0.0/0,::/0"` allows all). Keep **Safe Mode ON** regardless (external writes stay
+blocked; every action is still approval-gated). Do **not** run `tailscale funnel` on these ports
+— that would publish Otto to the public internet. For HTTPS with a real cert, `tailscale serve`
+is an option but needs both ports proxied under one name (out of scope here).
 
 ## Operational safety
 

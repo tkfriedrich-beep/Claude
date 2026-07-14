@@ -3,10 +3,11 @@
 // Agent detail (/skills/[slug]): mandate, the autonomy ladder (each step is the same
 // PATCH the old select issued — explicit act, never automatic), risk grant, enabled
 // switch, manifest details, run form. Same skill registry, same endpoints.
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { handleRadioKeys } from "@/lib/a11y";
 import { AUTONOMY_LABEL, RISK_LABEL } from "@/lib/types";
 import { RiskBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export default function SkillDetailPage({ params }: { params: Promise<{ slug: st
   const [mode, setMode] = useState("draft");
   const [inputJson, setInputJson] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const autonomyBtns = useRef<(HTMLButtonElement | null)[]>([]);
 
   const patch = useMutation({
     mutationFn: (body: { autonomy?: number; enabled?: boolean }) => api.patchSkill(slug, body),
@@ -106,21 +108,29 @@ export default function SkillDetailPage({ params }: { params: Promise<{ slug: st
             {/* The ladder replaces the old select; each step issues the identical PATCH. */}
             <div role="radiogroup" aria-label="Autonomy level" data-testid="autonomy-select"
                  className="mt-3 flex flex-wrap gap-1.5">
-              {AUTONOMY_STEPS.map((level) => {
+              {AUTONOMY_STEPS.map((level, i) => {
                 const active = skill.autonomy === level;
+                const setLevel = (index: number) => {
+                  const target = AUTONOMY_STEPS[index];
+                  autonomyBtns.current[index]?.focus();
+                  if (target !== skill.autonomy) patch.mutate({ autonomy: target });
+                };
                 return (
                   <button
                     key={level}
+                    ref={(el) => { autonomyBtns.current[i] = el; }}
                     type="button"
                     role="radio"
                     aria-checked={active}
+                    tabIndex={active ? 0 : -1}
                     disabled={patch.isPending}
                     onClick={() => { if (!active) patch.mutate({ autonomy: level }); }}
+                    onKeyDown={(e) => handleRadioKeys(e, AUTONOMY_STEPS.length, skill.autonomy, setLevel)}
                     className={cn(
                       "rounded-full border px-3.5 py-[5px] font-mono text-[10.5px] font-medium",
                       "uppercase tracking-[0.08em] transition-colors",
                       active
-                        ? "border-(--accent-border) bg-accent-soft text-accent"
+                        ? "border-(--accent-border) bg-accent-soft text-accent-hover"
                         : "border-line-control text-muted-2 hover:border-faint hover:text-ink",
                       patch.isPending && "opacity-60",
                     )}

@@ -20,13 +20,13 @@ export function ActivityRail({ open, onToggle }: { open: boolean; onToggle: () =
   const { recent, connected } = useLiveEvents();
   const { data: onboarding } = useQuery({ queryKey: ["onboarding"], queryFn: api.onboardingStatus });
   const enabled = onboarding?.completed === true;
-  const { data: activeRuns } = useQuery({
+  const { data: activeRuns, isError: runsError } = useQuery({
     queryKey: ["runs", "active"],
     queryFn: () => api.runs({ status: ACTIVE_RUN_STATUSES.join(",") }),
     enabled,
     refetchInterval: 15_000,
   });
-  const { data: pending } = useQuery({
+  const { data: pending, isError: pendingError } = useQuery({
     queryKey: ["approvals", "pending"],
     queryFn: () => api.approvals("pending"),
     enabled,
@@ -60,6 +60,8 @@ export function ActivityRail({ open, onToggle }: { open: boolean; onToggle: () =
   const queue = pending ?? [];
   const ottoState = deriveOttoState(runs, queue.length);
   const status = OTTO_STATUS[ottoState];
+  // The rail is a trust surface: a failed read must not render as a calm, healthy orb (F6).
+  const statusUnavailable = enabled && (runsError || pendingError);
 
   // Deep Work: the rail yields entirely — approvals queue silently (spec §05).
   if (mode === "deep") return null;
@@ -91,8 +93,11 @@ export function ActivityRail({ open, onToggle }: { open: boolean; onToggle: () =
 
       <div className="flex flex-col items-center gap-2 text-center">
         <OttoPulse state={ottoState} size={52} showLabel={false} />
-        <p className="text-[13px] font-medium" style={{ color: status.color }}>
-          {status.label}
+        <p
+          className="text-[13px] font-medium"
+          style={{ color: statusUnavailable ? "var(--muted)" : status.color }}
+        >
+          {statusUnavailable ? "Status unavailable" : status.label}
         </p>
       </div>
 
@@ -213,9 +218,11 @@ export function ActivityRail({ open, onToggle }: { open: boolean; onToggle: () =
       ) : null}
 
       <div className="mt-auto border-t border-line pt-3.5 font-mono text-[11px] leading-relaxed text-muted-2">
-        {briefing?.metrics.runs_today ?? 0} RUNS TODAY · ${(usage?.today.cost_usd ?? 0).toFixed(2)} SPENT
+        {briefing ? briefing.metrics.runs_today : "—"} RUNS TODAY ·{" "}
+        {usage ? `$${usage.today.cost_usd.toFixed(2)}` : "—"} SPENT
         <br />
-        {briefing?.metrics.artifacts_week ?? 0} ARTIFACTS THIS WEEK · {queue.length} DECISION{queue.length === 1 ? "" : "S"} OPEN
+        {briefing ? briefing.metrics.artifacts_week : "—"} ARTIFACTS THIS WEEK ·{" "}
+        {pendingError ? "—" : `${queue.length} DECISION${queue.length === 1 ? "" : "S"}`} OPEN
       </div>
     </aside>
   );

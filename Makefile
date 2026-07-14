@@ -17,14 +17,16 @@ dev: ## Run control plane (:8787) and web (:3000) together (localhost only)
 	wait
 
 # Bind both servers to a reachable interface so you can open the cockpit on your phone over
-# Tailscale (or your LAN). Default 0.0.0.0 = all interfaces (LAN + tailnet + localhost). For
-# tailnet-ONLY, pass your Tailscale IP: `make phone PHONE_HOST=100.x.y.z`. The unauthenticated
-# API is now reachable to anything that can reach this machine — keep Safe Mode ON, and never
-# `tailscale funnel` this (that would expose it to the public internet).
+# Tailscale. Default 0.0.0.0 opens the socket on all interfaces, but the control plane's
+# network guard (cockpit/netguard.py) only answers loopback + your tailnet (100.64.0.0/10) —
+# a random LAN host gets 403, not your data. For a hard socket-level tailnet bind, pass your
+# Tailscale IP: `make phone PHONE_HOST=100.x.y.z`. Widen with COCKPIT_TRUSTED_NETWORKS if you
+# really want LAN access. Never `tailscale funnel` this (that would publish it to the internet).
 PHONE_HOST ?= 0.0.0.0
-phone: ## Serve on all interfaces for phone/Tailscale access (PHONE_HOST=100.x.y.z for tailnet-only)
+phone: ## Serve for phone/Tailscale access; tailnet-guarded (PHONE_HOST=100.x.y.z to bind tailnet-only)
 	@echo "▶ Cockpit reachable at http://<this-machine's-tailscale-name>:3000 (bind $(PHONE_HOST))"
-	@echo "  Keep Safe Mode ON. Do NOT run 'tailscale funnel' — that publishes to the internet."
+	@echo "  Guarded: only localhost + your tailnet reach the API. Keep Safe Mode ON."
+	@echo "  Do NOT run 'tailscale funnel' — that publishes to the internet."
 	@trap 'kill 0' EXIT; \
 	( cd $(CP) && uv run uvicorn cockpit.main:app --host $(PHONE_HOST) --port 8787 --reload ) & \
 	( cd $(WEB) && pnpm exec next dev --port 3000 --hostname $(PHONE_HOST) ) & \

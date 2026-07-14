@@ -18,6 +18,7 @@ from cockpit.db import apply_sqlite_pragmas, db_session, init_engine
 from cockpit.events import get_bus
 from cockpit.ids import correlation_id as new_correlation_id
 from cockpit.logging import get_logger, setup_logging
+from cockpit.netguard import client_is_trusted
 from cockpit.registry import get_registry
 from cockpit.scheduler import scheduler_loop
 from cockpit.worker import recover_interrupted_runs, worker_loop
@@ -85,6 +86,30 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["X-Correlation-Id"] = cid
         return response
+
+    # Network access guard — the real boundary for the unauthenticated local API. Defined
+    # last so it is the OUTERMOST middleware: an untrusted remote client is rejected here,
+    # before CORS, routing, or any workspace/DB work. Loopback + trusted networks only
+    # (see cockpit/netguard.py); CORS alone does not stop a non-browser client.
+    @app.middleware("http")
+    async def network_guard(request: Request, call_next: Any):
+        client_host = request.client.host if request.client else None
+        if not client_is_trusted(client_host, settings.trusted_networks):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "type": "about:blank",
+                    "title": "Forbidden",
+                    "status": 403,
+                    "detail": (
+                        "This control plane only accepts local and trusted-network clients. "
+                        "Reach it over your Tailscale tailnet, or set COCKPIT_TRUSTED_NETWORKS."
+                    ),
+                    "correlation_id": None,
+                },
+                media_type="application/problem+json",
+            )
+        return await call_next(request)
 
     @app.exception_handler(HTTPException)
     async def problem_handler(request: Request, exc: HTTPException) -> JSONResponse:
