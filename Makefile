@@ -56,10 +56,11 @@ contracts: ## Regenerate packages/contracts from the FastAPI OpenAPI schema
 	cd $(CP) && uv run python -m cockpit.export_openapi ../../packages/contracts/openapi.json
 	pnpm --filter @agenticos/contracts generate
 
-app: ## Rebuild the Otto.app launcher icon and make its launcher executable
-	uv run --with pillow python desktop/make_icon.py
-	chmod +x desktop/Otto.app/Contents/MacOS/Otto
-	@echo "desktop/Otto.app ready — drag it to your Desktop, then right-click → Open the first time."
+app: ## Rebuild both Otto launcher icons and mark the launchers executable
+	uv run --with pillow python desktop/make_icon.py --variant default
+	uv run --with pillow python desktop/make_icon.py --variant phone
+	chmod +x desktop/Otto.app/Contents/MacOS/Otto "desktop/Otto (Phone).app/Contents/MacOS/Otto Phone"
+	@echo "Otto.app (local, indigo) + 'Otto (Phone).app' (Tailscale, gold) ready — drag to your Desktop; right-click → Open the first time."
 
 clean: ## Remove build artifacts (keeps data/local)
 	rm -rf $(WEB)/.next $(WEB)/node_modules node_modules $(CP)/.venv

@@ -1,8 +1,13 @@
-"""Render the 'Otto' macOS app icon (rounded-square, indigo→sky gradient, glowing pulse orb)
-and pack a multi-size Otto.icns. No macOS tools needed — the icns is packed by hand.
+"""Render the macOS app icons (rounded-square, glowing pulse orb) and pack multi-size .icns
+by hand — no macOS tools needed.
 
-Usage:  uv run --with pillow python desktop/make_icon.py [--out PATH] [--preview PATH]
-Regenerates desktop/Otto.app/Contents/Resources/Otto.icns by default (see `make app`)."""
+- default variant → Otto.app icon (indigo→sky, white orb).
+- phone variant   → Otto (Phone).app icon (graphite→gold, champagne orb) — the OttoOS look,
+  visually distinct in the Dock.
+
+Usage:  uv run --with pillow python desktop/make_icon.py [--variant default|phone]
+                                                         [--out PATH] [--preview PATH]
+Regenerates the matching bundle's .icns by default (see `make app`)."""
 
 import argparse
 import struct
@@ -13,6 +18,22 @@ from PIL import Image, ImageDraw, ImageFilter
 
 SS = 2  # supersample factor for crisp anti-aliasing
 BASE = 1024
+
+# Per-variant palette: body gradient (top, bottom), orb (edge, center), glow rgba, ring rgb.
+PALETTES = {
+    "default": {
+        "body": ((79, 70, 229), (14, 165, 233)),
+        "orb": ((219, 234, 254), (255, 255, 255)),
+        "glow": (180, 220, 255, 90),
+        "ring": (255, 255, 255),
+    },
+    "phone": {  # OttoOS champagne gold on midnight graphite
+        "body": ((38, 34, 27), (18, 17, 14)),
+        "orb": ((201, 169, 97), (240, 225, 180)),
+        "glow": (201, 169, 97, 95),
+        "ring": (201, 169, 97),
+    },
+}
 
 
 def lerp(a, b, t):
@@ -27,14 +48,14 @@ def vertical_gradient(w, h, top, bottom):
     return strip.resize((w, h))
 
 
-def render(size_px: int) -> Image.Image:
+def render(size_px: int, pal: dict = PALETTES["default"]) -> Image.Image:
     W = size_px * SS
     img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
 
-    # rounded-square body with a vertical indigo→sky gradient
+    # rounded-square body with a vertical gradient
     margin = int(W * 0.085)
     radius = int((W - 2 * margin) * 0.2237)  # macOS 11 squircle-ish corner
-    grad = vertical_gradient(W, W, (79, 70, 229), (14, 165, 233)).convert("RGBA")
+    grad = vertical_gradient(W, W, pal["body"][0], pal["body"][1]).convert("RGBA")
     mask = Image.new("L", (W, W), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         [margin, margin, W - margin, W - margin], radius=radius, fill=255
@@ -59,7 +80,7 @@ def render(size_px: int) -> Image.Image:
     rd = ImageDraw.Draw(rings)
     for r, a in [(int(W * 0.30), 70), (int(W * 0.375), 40)]:
         lw = max(2, int(W * 0.010))
-        rd.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255, a), width=lw)
+        rd.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(*pal["ring"], a), width=lw)
     rings = rings.filter(ImageFilter.GaussianBlur(W * 0.004))
     img = Image.alpha_composite(img, rings)
 
@@ -69,7 +90,7 @@ def render(size_px: int) -> Image.Image:
     gdraw = ImageDraw.Draw(glow)
     gdraw.ellipse(
         [cx - int(orb_r * 1.6), cy - int(orb_r * 1.6), cx + int(orb_r * 1.6), cy + int(orb_r * 1.6)],
-        fill=(180, 220, 255, 90),
+        fill=pal["glow"],
     )
     glow = glow.filter(ImageFilter.GaussianBlur(W * 0.03))
     img = Image.alpha_composite(img, glow)
@@ -81,7 +102,7 @@ def render(size_px: int) -> Image.Image:
     for i in range(steps, 0, -1):
         t = i / steps
         rr = int(orb_r * t)
-        col = lerp((219, 234, 254), (255, 255, 255), 1 - t)  # edge bluish → bright center
+        col = lerp(pal["orb"][0], pal["orb"][1], 1 - t)  # edge → bright center
         od.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(*col, 255))
     # specular highlight
     hx, hy, hr = cx - int(orb_r * 0.33), cy - int(orb_r * 0.36), int(orb_r * 0.42)
@@ -95,13 +116,19 @@ def render(size_px: int) -> Image.Image:
 
 
 def main() -> None:
-    default_out = Path(__file__).resolve().parent / "Otto.app/Contents/Resources/Otto.icns"
-    ap = argparse.ArgumentParser(description="Render the Otto app icon → Otto.icns")
-    ap.add_argument("--out", type=Path, default=default_out, help="destination .icns path")
+    here = Path(__file__).resolve().parent
+    default_outs = {
+        "default": here / "Otto.app/Contents/Resources/Otto.icns",
+        "phone": here / "Otto (Phone).app/Contents/Resources/OttoPhone.icns",
+    }
+    ap = argparse.ArgumentParser(description="Render an Otto app icon → .icns")
+    ap.add_argument("--variant", choices=list(PALETTES), default="default")
+    ap.add_argument("--out", type=Path, default=None, help="destination .icns (defaults per variant)")
     ap.add_argument("--preview", type=Path, default=None, help="also write a PNG preview here")
     args = ap.parse_args()
+    out = args.out or default_outs[args.variant]
 
-    master = render(BASE)
+    master = render(BASE, PALETTES[args.variant])
     if args.preview:
         args.preview.parent.mkdir(parents=True, exist_ok=True)
         master.save(args.preview)
@@ -120,9 +147,9 @@ def main() -> None:
         data = buf.getvalue()
         chunks += ostype + struct.pack(">I", len(data) + 8) + data
     icns = b"icns" + struct.pack(">I", len(chunks) + 8) + chunks
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_bytes(icns)
-    print(f"wrote {args.out} ({len(icns)} bytes)")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(icns)
+    print(f"wrote {out} ({len(icns)} bytes)")
 
 
 if __name__ == "__main__":
