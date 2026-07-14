@@ -3,17 +3,33 @@ SHELL := /bin/bash
 CP := services/control-plane
 WEB := apps/web
 
-.PHONY: setup dev demo test e2e lint format doctor contracts clean app
+.PHONY: setup dev phone demo test e2e lint format doctor contracts clean app
 
 setup: ## Install all dependencies and migrate the local database
 	cd $(CP) && uv sync --extra dev
 	cd $(CP) && uv run alembic upgrade head   # migrate first so a web-deps hiccup can't leave the DB unmigrated
 	pnpm install
 
-dev: ## Run control plane (:8787) and web (:3000) together
+dev: ## Run control plane (:8787) and web (:3000) together (localhost only)
 	@trap 'kill 0' EXIT; \
 	( cd $(CP) && uv run uvicorn cockpit.main:app --port 8787 --reload ) & \
 	( cd $(WEB) && pnpm dev ) & \
+	wait
+
+# Bind both servers to a reachable interface so you can open the cockpit on your phone over
+# Tailscale. Default 0.0.0.0 opens the socket on all interfaces, but the control plane's
+# network guard (cockpit/netguard.py) only answers loopback + your tailnet (100.64.0.0/10) —
+# a random LAN host gets 403, not your data. For a hard socket-level tailnet bind, pass your
+# Tailscale IP: `make phone PHONE_HOST=100.x.y.z`. Widen with COCKPIT_TRUSTED_NETWORKS if you
+# really want LAN access. Never `tailscale funnel` this (that would publish it to the internet).
+PHONE_HOST ?= 0.0.0.0
+phone: ## Serve for phone/Tailscale access; tailnet-guarded (PHONE_HOST=100.x.y.z to bind tailnet-only)
+	@echo "▶ Cockpit reachable at http://<this-machine's-tailscale-name>:3000 (bind $(PHONE_HOST))"
+	@echo "  Guarded: only localhost + your tailnet reach the API. Keep Safe Mode ON."
+	@echo "  Do NOT run 'tailscale funnel' — that publishes to the internet."
+	@trap 'kill 0' EXIT; \
+	( cd $(CP) && uv run uvicorn cockpit.main:app --host $(PHONE_HOST) --port 8787 --reload ) & \
+	( cd $(WEB) && pnpm exec next dev --port 3000 --hostname $(PHONE_HOST) ) & \
 	wait
 
 demo: ## Seed the demo workspace (idempotent)
@@ -42,10 +58,11 @@ contracts: ## Regenerate packages/contracts from the FastAPI OpenAPI schema
 	cd $(CP) && uv run python -m cockpit.export_openapi ../../packages/contracts/openapi.json
 	pnpm --filter @agenticos/contracts generate
 
-app: ## Rebuild the Otto.app launcher icon and make its launcher executable
-	uv run --with pillow python desktop/make_icon.py
-	chmod +x desktop/Otto.app/Contents/MacOS/Otto
-	@echo "desktop/Otto.app ready — drag it to your Desktop, then right-click → Open the first time."
+app: ## Rebuild both Otto launcher icons and mark the launchers executable
+	uv run --with pillow python desktop/make_icon.py --variant default
+	uv run --with pillow python desktop/make_icon.py --variant phone
+	chmod +x desktop/Otto.app/Contents/MacOS/Otto "desktop/Otto (Phone).app/Contents/MacOS/Otto Phone"
+	@echo "Otto.app (local, indigo) + 'Otto (Phone).app' (Tailscale, gold) ready — drag to your Desktop; right-click → Open the first time."
 
 clean: ## Remove build artifacts (keeps data/local)
 	rm -rf $(WEB)/.next $(WEB)/node_modules node_modules $(CP)/.venv

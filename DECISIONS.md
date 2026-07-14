@@ -365,3 +365,109 @@ are explicitly flagged **[deviation]**.
   streams, secret-store round-trip, providers/secrets/resource APIs). Honest bound: without a
   provider key or a local Ollama, those providers report `needs setup` and the cockpit stays on the
   offline demo runtime.
+
+## ADR-019 — OttoOS visual redesign: presentation-layer evolution, nothing removed **[capability]**
+
+- **Context:** A Claude Design handoff (`OttoOS Design Spec` + interactive `OttoOS Cockpit`
+  prototype, direction 1a "Flight Deck", champagne gold) rebrands the cockpit as **OttoOS** and
+  restructures the shell around judgment. The spec's own constraint: backend, contracts, and policy
+  gateway unchanged; steps 1–5 of its "Push to code" plan require no backend changes.
+- **Decision:**
+  - **Tokens, not forks.** `globals.css` swaps values under the SAME custom-property architecture,
+    adding the hairline ladder (shell→card→row→control→button), the five-step ivory ink ladder, the
+    champagne-gold accent family (`#c9a961`, on-accent `#171308`), judgment amber (reserved
+    exclusively for "needs you"), desaturated `--ok`, and well/tile/nav surfaces. Dark "midnight
+    graphite" becomes the DEFAULT; light "parchment" is preserved with a gold-shifted accent.
+  - **Three fonts, three registers** via `next/font/google` (self-hosted at build): Instrument Sans
+    for all UI, Newsreader italic for Otto's voice only (`.otto-voice`), IBM Plex Mono for technical
+    truth (paths, IDs, risk chips, `.section-label`). Radii 16/12/9.
+  - **Shell = four zones with one job each.** Nav grouped OPERATE/CONTEXT/SYSTEM with executive
+    labels over UNCHANGED routes (Home→Briefing, Projects→Missions, Skills→Agents,
+    Approvals→Decisions, People→Relationships, Integrations→Systems, History→Archive,
+    Agenda→Calendar); a persistent **command band** (Otto orb + live status line + composer with
+    autonomy segments mapping 1:1 to run modes + budget/systems vitals) that hands off to `/command`
+    via URL params; a **trust strip** closing every screen; the ambient rail (inline approve on mini
+    decision cards, live timeline, systems dots, counts footer). **Work modes** (Command/Focus/Deep)
+    collapse zones around attention — pure client state, ESC exits, approvals queue silently.
+  - **The Otto pulse stays real state, never decoration** — same `deriveOttoState` semantics, new
+    champagne-sphere rendering, status-line pairing, `aria-live` announcements, reduced-motion
+    degrades to color + label.
+  - **Decision card anatomy preserved field-for-field** (what/why/target/reversibility/diff/
+    technical details/note/Approve once/Deny/Cancel the run) with Modify as a relabel of the
+    existing edit hook, diff wells coloring +/− lines, amber card surface as the only amber-tinted
+    surface, and a/d keyboard shortcuts on the focused card.
+  - **Nothing fabricated.** Spec slots that need new backend fields (mission progress/milestone/
+    confidence, briefing synthesis grid, approvals Defer, people next-touch service) are OMITTED or
+    derived client-side from real fetched data only; they remain the spec's step-6 follow-up. The
+    prototype's stale "OpenAI/Ollama PLANNED" strip is superseded by the live provider/model/secrets
+    surfaces from ADR-018, restyled not removed.
+- **Consequences:** Every route, control, testid, and honesty line survives restyled; e2e specs
+  updated only where visible labels changed (palette search term, Decisions heading, mobile tab).
+  The redesign is reversible by reverting presentation files — no schema, API, or policy change
+  rides along.
+
+## ADR-020 — Codex adversarial review R4: safety-boundary, honesty, and a11y fixes **[hardening]**
+
+- **Context:** Round-4 review (12 findings against `e0c353c`: 2 Critical, 4 High, 5 Medium, 1
+  Low) against the OttoOS shell + phone/Tailscale work. The safety-critical items Codex *tried and
+  failed* to break held (write-only secrets, R4 phrase gate on rail+keyboard, band autosubmit-once,
+  Deep Work approval reachability). The 12 findings were legitimate and mostly in the new shell code.
+- **Decision (fix per finding):**
+  - **F1 (Critical) — phone mode exposed the unauthenticated API to the whole LAN.** Added a
+    **network guard** (`cockpit/netguard.py` + outermost middleware in `main.py`): loopback is always
+    allowed, plus `COCKPIT_TRUSTED_NETWORKS` (default the Tailscale CGNAT range `100.64.0.0/10`);
+    every other remote client gets `403` **before** routing/DB/workspace work. This is the access
+    boundary — CORS is only browser ergonomics. `make phone` keeps a `0.0.0.0` bind for localhost
+    ergonomics (the guard, not the bind address, is the boundary); `PHONE_HOST=100.x.y.z` remains the
+    hard socket-level tailnet bind. Docs (Makefile, launcher, `desktop/README.md`, RUNBOOK) rewritten
+    accordingly. **Residual (accepted, single-user MVP):** tailnet peers are trusted without a
+    per-device token — a real paired-device credential is the documented follow-up, not shipped here.
+  - **F2 (Critical) — "Execute + approval" and "In-policy" both POSTed `mode:"act"`.** Removed the
+    per-command `allowlist`/"In-policy" segment entirely; the honest three modes (Advise/Draft/
+    **Execute**) map 1:1 to the API's `read_only|draft|act`. Whether an allow-listed tool runs without
+    approval is a property of the agent's persisted autonomy (level 5) **plus** Settings → Policies —
+    never a per-command mode label that could silently raise effective autonomy. Command-page copy now
+    states the approval promise honestly ("…unless you've allow-listed a tool in Settings → Policies").
+  - **F3 (High) — Safe Mode/Settings unreachable on a phone.** One shared `SafeModePill` now renders
+    in the desktop nav (`safe-mode-pill`) *and* the always-visible command band (`safe-mode-pill-mobile`,
+    `lg:hidden`), so the emergency gate is one tap from every viewport. The mobile bottom bar's "More"
+    is now a **system menu sheet** (Missions/Agents/Relationships/Knowledge/Automations/Systems/
+    Archive/**Settings**) instead of a jump straight to Archive.
+  - **F4 (High) — MCP form sent the whole command string as `command`, no `args`.** Added
+    `tokenizeCommand()` (quote-aware) in `lib/utils`; the form now sends `command`+`args` separately
+    (backend already supported both; it spawns them directly, no shell).
+  - **F5 (High) — ⌘K RUN launched required-input/disabled skills with `{}`.** The palette now mirrors
+    the Agents roster's launch capability: enabled + zero-required-input skills run; everything else
+    routes to its detail form; disabled/needs-input are labeled; a failed launch keeps the palette
+    open with an inline error instead of closing into a doomed run.
+  - **F6 (High) — trust surfaces fabricated healthy/default state on load/error.** Command band, trust
+    strip, and ambient rail now read query `isError` and render explicit "Status unavailable" /
+    "BUDGET — UNAVAILABLE" / "Safe Mode — status unavailable" / "—" instead of coalescing missing data
+    to `?? []`/`?? 0`/`?? 5`/`?? "mock"`/`?? true`. The nav Safe Mode pill shows "Safe Mode —" until
+    the real value is known, resolving the on/off contradiction.
+  - **F7 (Medium) — Deep Work copy claimed "nothing executes".** Deep Work only hides UI, so the copy
+    is now "interruptions hidden. Active work keeps running; approvals wait quietly in the queue."
+  - **F8 (Medium) — Settings `ThemeControl` re-introduced the localStorage hydration mismatch.** It now
+    initializes to a server-stable value and reads the stored preference in an effect after mount
+    (the same pattern `ThemeToggle` uses).
+  - **F9 (Medium) — faint/muted/amber tokens failed AA for small text.** Raised four tokens to
+    ≥4.5:1 on their worst-case surfaces: dark `--ink-faint` `#6f6a5d→#8a8373`, light `--ink-faint`
+    `#97927f→#716d5c`, light `--muted-2` `#7c7869→#706d5f`, light `--warn` `#b97c10→#93630d` (and the
+    one small-text `text-accent`-on-`accent-soft` pill switched to `text-accent-hover`). A deterministic
+    token-contrast vitest guards them. **Deferred:** a full two-theme per-route Axe `color-contrast`
+    sweep — several brand gold-on-gold-soft combinations are borderline and need a design pass, not a
+    token bump; the E2E Axe run still opts out of `color-contrast` and relies on the token test.
+  - **F10 (Medium) — ⌘K modal didn't trap or restore focus.** The palette now traps Tab/Shift+Tab
+    inside the dialog and restores focus to the invoking element on close.
+  - **F11 (Medium) — segmented controls claimed radio semantics without keyboard behavior.**
+    `SegmentedControl` (and the agent-detail autonomy ladder) now implement the WAI-ARIA radio pattern:
+    one tabbable checked item (roving `tabIndex`) + Arrow/Home/End, via shared `handleRadioKeys`.
+  - **F12 (Low) — `home-composer` testid was dropped.** Restored as a compatibility id on the band
+    composer's container (the input keeps `band-composer`).
+- **Consequences:** No API schema, route, or policy change — the CommandRequest contract is untouched
+  (still `read_only|draft|act`), so contracts need no regen. Backend gate: `netguard` proven by 17
+  new tests (pure trust decision + middleware rejects an unauthenticated remote `PATCH /settings`).
+  Web gate: +18 vitest (tokenizer, radio keys, segmented keyboard, token contrast) and +3 E2E
+  (mobile Safe Mode/Settings reachability, palette required-input routing, `home-composer`).
+  Codex's broader design notes (attention-mode vs execution-policy as distinct concepts, a first-class
+  stale/unknown visual state, paired-device management UI) are logged as future work, not shipped here.

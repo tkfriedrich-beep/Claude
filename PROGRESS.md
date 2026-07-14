@@ -311,3 +311,58 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
       vitest 6 passed; `next build` 16/16 pages; contracts regenerated (`make contracts`)
 - [x] Live smoke: secret saved at 0600 and absent from the DB; OpenAI flips to available once
       keyed; n8n webhook add→remove; model persists across settings reads
+
+### M7 — OttoOS visual redesign (presentation layer, ADR-019) — ✅ (2026-07-14)
+
+- [x] Foundations: champagne-gold/graphite token system (hairline + ink ladders, judgment
+      amber, ok/diff tones) under the same custom-property names; dark "midnight graphite"
+      default, parchment preserved gold-shifted; Instrument Sans / Newsreader italic (Otto's
+      voice only) / IBM Plex Mono via next/font; radii 16/12/9
+- [x] Shell: nav grouped OPERATE/CONTEXT/SYSTEM with executive labels over unchanged routes;
+      persistent command band (Otto hero + live status + composer + autonomy segments +
+      budget/systems vitals → hands off to /command); trust strip; Command/Focus/Deep work
+      modes (ESC exits); ambient rail (inline approve, live timeline, systems dots, counts);
+      expanded ⌘K palette (GO TO/RUN/CONTROL/MODE); canonical decision card (Modify hook,
+      diff +/- coloring, a/d keys); champagne-sphere Otto pulse, same state semantics
+- [x] All 13 screens restyled: Briefing, Command (band handoff via searchParams), Missions,
+      Agents (+detail autonomy ladder), Decisions (live tab tallies), Calendar,
+      Relationships (real next-touch derivation), Knowledge, Automations, Systems (provider
+      tiles + write-only Secrets + connector monogram cards — ADR-018 features intact),
+      Archive (+run detail, "Verification"/"Unresolved" kept), Settings (segmented exec mode,
+      MIDNIGHT/PARCHMENT theme, all controls), Onboarding (retoken, flow + testids intact) —
+      nothing removed, testids kept, no fabricated data (backend-less spec slots omitted
+      per ADR-019)
+- [x] Gates: web tsc + eslint clean; vitest 6 passed; `next build` 16/16; unit/e2e specs
+      updated for renamed labels; live visual smoke against a real control plane (briefing,
+      decisions, systems, settings, archive screenshots verified)
+- [ ] Spec step-6 backend follow-ups: approvals defer, mission progress/milestone/confidence,
+      briefing synthesis fields, people next_touch service-side
+
+### M8 — Codex review R4: safety/honesty/a11y fixes (ADR-020) — ✅ (2026-07-14)
+
+- [x] F1 (Critical): network guard — `cockpit/netguard.py` + outermost middleware reject any
+      non-loopback, non-tailnet client with 403 before routing; `COCKPIT_TRUSTED_NETWORKS`
+      (default `100.64.0.0/10`); Makefile/launcher/README/RUNBOOK rewritten (guard, not bind
+      address, is the boundary). Residual: per-device token is a documented follow-up.
+- [x] F2 (Critical): dropped the per-command "In-policy"/allowlist segment — honest three modes
+      (Advise/Draft/Execute) map 1:1 to `read_only|draft|act`; allowlisting lives only in agent
+      autonomy + Settings → Policies; command copy no longer over-promises.
+- [x] F3 (High): shared `SafeModePill` in nav + always-visible band (`safe-mode-pill-mobile`);
+      mobile "More" is now a system sheet incl. Settings — Safe Mode + Settings one tap on a phone.
+- [x] F4 (High): quote-aware `tokenizeCommand()` splits MCP stdio into command+args (no shell).
+- [x] F5 (High): ⌘K RUN mirrors the roster's launch gates — required-input → form, disabled
+      labeled, failures keep the palette open with an inline error.
+- [x] F6 (High): band/trust-strip/rail disclose loading/unavailable instead of fabricating
+      healthy budget/systems/provider/Safe-Mode/idle state; on/off contradiction resolved.
+- [x] F7 (Medium): honest Deep Work copy ("active work keeps running").
+- [x] F8 (Medium): Settings theme control reads localStorage after mount (no hydration mismatch).
+- [x] F9 (Medium): faint/muted/amber tokens raised to WCAG AA (deterministic contrast test);
+      full per-route Axe color-contrast sweep deferred (design pass) — documented in ADR-020.
+- [x] F10 (Medium): ⌘K modal traps + restores focus.
+- [x] F11 (Medium): `SegmentedControl` + autonomy ladder implement the WAI-ARIA radio keyboard
+      pattern (roving tabIndex + Arrow/Home/End) via shared `handleRadioKeys`.
+- [x] F12 (Low): `home-composer` restored as a compatibility testid on the band composer.
+- [x] Gates: control-plane pytest **188 passed** (+17 netguard), ruff + mypy clean; web tsc +
+      eslint clean; vitest **24 passed** (+18: tokenizer, radio keys, segmented keyboard,
+      token contrast); `next build` 16/16; Playwright **12 passed** (desktop + mobile, incl.
+      new F3/F5/F12 regressions; mobile no-overflow holds with the added band pill).

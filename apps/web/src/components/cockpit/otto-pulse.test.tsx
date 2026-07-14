@@ -17,7 +17,7 @@ describe("deriveOttoState", () => {
 describe("OttoPulse", () => {
   it("announces state accessibly and encodes it on the svg", () => {
     render(<OttoPulse state="waiting" />);
-    expect(screen.getByTestId("otto-state")).toHaveTextContent("Waiting for your approval");
+    expect(screen.getByTestId("otto-state")).toHaveTextContent("Waiting on your judgment");
     expect(document.querySelector("[data-otto-state='waiting']")).not.toBeNull();
   });
 });

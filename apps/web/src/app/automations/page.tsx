@@ -1,18 +1,37 @@
 "use client";
 
+// Automations (/automations) — the schedule ledger. Scheduled agents start in Shadow Mode
+// and graduate (Shadow → Draft → Act with approval) only by a deliberate human choice made
+// in this panel — Otto never promotes itself. Same endpoints and controls — presentation only.
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { fmtDate, fmtTime } from "@/lib/utils";
+import type { Schedule } from "@/lib/types";
+import { cn, fmtDate, fmtTime, RUN_STATUS_STYLE } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
+import { agentMetaFor } from "@/components/ui/monogram";
+import { CardSkeleton, EmptyState, ErrorState, SectionLabel } from "@/components/ui/states";
 import { Switch } from "@/components/ui/switch";
-import { CardSkeleton, EmptyState, ErrorState } from "@/components/ui/states";
-import { Play, Plus, Repeat } from "lucide-react";
+import { Plus, Repeat } from "lucide-react";
+
+// Last-run status reuses the run ledger's tone vocabulary — the word is the status,
+// color only reinforces it.
+const STATUS_TEXT: Record<string, string> = {
+  accent: "text-accent-hover",
+  warn: "text-warn",
+  danger: "text-danger",
+  muted: "text-muted-2",
+};
+
+function statusClass(status: string | null): string {
+  const tone = (status ? RUN_STATUS_STYLE[status]?.tone : undefined) ?? "accent";
+  return STATUS_TEXT[tone] ?? "text-accent-hover";
+}
 
 export default function AutomationsPage() {
   const queryClient = useQueryClient();
@@ -34,14 +53,18 @@ export default function AutomationsPage() {
     },
   });
 
+  const list = automations ?? [];
+
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Automations</h1>
-          <p className="text-[13px] text-muted">
-            Scheduled skills start in <strong>Shadow Mode</strong>: they run and show what they
-            <em> would</em> have done — real actions only after you graduate them deliberately.
+    <div className="fadeup mx-auto w-full max-w-4xl space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-semibold tracking-[-0.3px]">Automations</h1>
+          <p className="mt-1 max-w-2xl text-[14px] text-muted">
+            Scheduled agents start in{" "}
+            <strong className="font-semibold text-ink-soft">Shadow Mode</strong>: they run and
+            show what they <em>would</em> have done — real actions only after you graduate them
+            deliberately.
           </p>
         </div>
         <Button variant="primary" onClick={() => setCreateOpen(true)}>
@@ -53,55 +76,96 @@ export default function AutomationsPage() {
         <CardSkeleton lines={4} />
       ) : error ? (
         <ErrorState detail={(error as Error).message} onRetry={() => refetch()} />
-      ) : (automations ?? []).length === 0 ? (
+      ) : list.length === 0 ? (
         <EmptyState icon={<Repeat />} title="No automations yet"
                     hint="Schedule Morning Brief or Project Pulse — Shadow Mode keeps them harmless while you build trust."
-                    action={<Button variant="primary" onClick={() => setCreateOpen(true)}>Create one</Button>} />
+                    action={<Button onClick={() => setCreateOpen(true)}>Create one</Button>} />
       ) : (
-        <div className="space-y-3" data-testid="automation-list">
-          {(automations ?? []).map((schedule) => (
-            <Card key={schedule.id}>
-              <CardBody className="flex flex-wrap items-center gap-3 pt-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14.5px] font-semibold">{schedule.name}</p>
-                  <p className="text-[12.5px] text-muted">
-                    every {schedule.interval_minutes >= 1440
-                      ? `${Math.round(schedule.interval_minutes / 1440)}d`
-                      : `${schedule.interval_minutes}m`}
-                    {" · next "}
-                    {schedule.next_run_at ? `${fmtDate(schedule.next_run_at)} ${fmtTime(schedule.next_run_at)}` : "—"}
-                    {schedule.last_run_id ? (
-                      <>
-                        {" · last "}
-                        <Link className="text-accent hover:underline" href={`/history/${schedule.last_run_id}`}>
-                          {schedule.last_run_status ?? "view"}
-                        </Link>
-                      </>
-                    ) : " · never ran"}
-                  </p>
-                </div>
-                {schedule.shadow_mode ? <Badge tone="warn">shadow</Badge> : <Badge tone="accent">live</Badge>}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] text-muted">{schedule.enabled ? "on" : "paused"}</span>
-                  <Switch checked={schedule.enabled} label={`${schedule.name} enabled`}
-                          onChange={(v) => patch.mutate({ id: schedule.id, body: { enabled: v } })} />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] text-muted">shadow</span>
-                  <Switch checked={schedule.shadow_mode} label={`${schedule.name} shadow mode`}
-                          onChange={(v) => patch.mutate({ id: schedule.id, body: { shadow_mode: v } })} />
-                </div>
-                <Button size="sm" busy={runNow.isPending} onClick={() => runNow.mutate(schedule.id)}>
-                  <Play className="size-3.5" /> Run now
-                </Button>
-              </CardBody>
-            </Card>
-          ))}
-        </div>
+        <section className="space-y-3.5">
+          <div className="flex flex-wrap items-baseline gap-3.5 px-1">
+            <SectionLabel>Schedule ledger</SectionLabel>
+            <span className="text-[13px] text-muted">{list.length} scheduled</span>
+          </div>
+          <div className="space-y-3" data-testid="automation-list">
+            {list.map((schedule) => (
+              <ScheduleCard key={schedule.id} schedule={schedule}
+                            onPatch={(body) => patch.mutate({ id: schedule.id, body })}
+                            onRunNow={() => runNow.mutate(schedule.id)}
+                            runBusy={runNow.isPending} />
+            ))}
+          </div>
+        </section>
       )}
+
+      {!isLoading && !error ? (
+        <p className="border-t border-line-row px-1 pt-3.5 text-[12.5px] leading-relaxed text-faint">
+          Graduation path:{" "}
+          <span className="text-muted">Shadow → Draft → Act with approval</span>. Each step is a
+          deliberate choice in this panel — Otto never promotes itself.
+        </p>
+      ) : null}
 
       <CreateAutomationDialog open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
+  );
+}
+
+function ScheduleCard({
+  schedule,
+  onPatch,
+  onRunNow,
+  runBusy,
+}: {
+  schedule: Schedule;
+  onPatch: (body: Record<string, unknown>) => void;
+  onRunNow: () => void;
+  runBusy: boolean;
+}) {
+  const agent = agentMetaFor(schedule.skill_slug, schedule.name);
+  const interval = schedule.interval_minutes >= 1440
+    ? `${Math.round(schedule.interval_minutes / 1440)}d`
+    : `${schedule.interval_minutes}m`;
+
+  return (
+    <Card className="px-6 py-5">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="min-w-0 flex-1 basis-64">
+          <p className="truncate text-[16px] font-semibold tracking-[-0.01em]">{schedule.name}</p>
+          <p className="mt-1 text-[13px] text-muted">
+            {agent.name} agent · every {interval} · next{" "}
+            <span className="font-mono text-[12px] text-ink-soft">
+              {schedule.next_run_at
+                ? `${fmtDate(schedule.next_run_at)} ${fmtTime(schedule.next_run_at)}`
+                : "—"}
+            </span>
+            {schedule.last_run_id ? (
+              <>
+                {" · last "}
+                <Link className={cn("hover:underline", statusClass(schedule.last_run_status))}
+                      href={`/history/${schedule.last_run_id}`}>
+                  {schedule.last_run_status ?? "view"}
+                </Link>
+              </>
+            ) : " · never ran"}
+          </p>
+        </div>
+        {schedule.shadow_mode ? <Badge tone="warn">shadow</Badge> : <Badge tone="accent">live</Badge>}
+        {schedule.enabled ? <Badge tone="accent">on</Badge> : <Badge tone="muted">paused</Badge>}
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-2">enabled</span>
+          <Switch checked={schedule.enabled} label={`${schedule.name} enabled`}
+                  onChange={(v) => onPatch({ enabled: v })} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-2">shadow</span>
+          <Switch checked={schedule.shadow_mode} label={`${schedule.name} shadow mode`}
+                  onChange={(v) => onPatch({ shadow_mode: v })} />
+        </div>
+        <Button size="sm" busy={runBusy} onClick={onRunNow} aria-label={`Run ${schedule.name} now`}>
+          ▷ Run now
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -131,21 +195,26 @@ function CreateAutomationDialog({ open, onClose }: { open: boolean; onClose: () 
   return (
     <Dialog open={open} onClose={onClose} title="New automation">
       <div className="space-y-4">
-        <Field label="Skill">
+        <Field label="Agent">
           <Select value={skillSlug} onChange={(e) => setSkillSlug(e.target.value)} className="w-full">
-            {schedulable.map((skill) => (
-              <option key={skill.slug} value={skill.slug}>{skill.name}</option>
-            ))}
+            {schedulable.map((skill) => {
+              const meta = agentMetaFor(skill.slug, skill.name);
+              return (
+                <option key={skill.slug} value={skill.slug}>
+                  {meta.name === skill.name ? skill.name : `${meta.name} · ${skill.name}`}
+                </option>
+              );
+            })}
           </Select>
         </Field>
         <Field label="Interval (minutes)" hint="1440 = daily. Minimum 15.">
           <Input type="number" min={15} value={intervalMinutes}
                  onChange={(e) => setIntervalMinutes(Number(e.target.value))} />
         </Field>
-        <div className="flex items-center justify-between rounded-[10px] border border-warn/40 bg-warn-soft/50 px-3.5 py-3">
+        <div className="flex items-center justify-between gap-4 rounded-[11px] border border-(--warn-border) bg-warn-surface px-4 py-3.5">
           <div>
-            <p className="text-[13.5px] font-medium">Shadow Mode</p>
-            <p className="text-[12.5px] text-muted">
+            <p className="text-[13.5px] font-medium text-warn">Shadow Mode</p>
+            <p className="mt-0.5 text-[12.5px] text-muted">
               Strongly recommended for new automations — previews instead of real actions.
             </p>
           </div>

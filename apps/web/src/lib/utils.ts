@@ -47,6 +47,20 @@ export const RUN_STATUS_STYLE: Record<string, { label: string; tone: "accent" | 
   interrupted: { label: "Interrupted", tone: "warn" },
 };
 
+// Split a shell-like command string into an executable + argv, respecting single/double
+// quotes. Used for MCP stdio registration so `npx -y pkg /path` is sent as
+// command:"npx", args:["-y","pkg","/path"] — the backend spawns command+args directly
+// (no shell), so an unsplit string would try to exec one binary with that literal name.
+export function tokenizeCommand(input: string): string[] {
+  const tokens: string[] = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(input)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[3] ?? "");
+  }
+  return tokens;
+}
+
 export const ACTIVE_RUN_STATUSES = [
   "queued",
   "triaging",

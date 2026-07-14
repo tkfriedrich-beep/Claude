@@ -4,12 +4,14 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "warn";
 type Size = "sm" | "md" | "lg";
 
+// OttoOS spec §03: primary = champagne gold on near-black; secondary = hairline outline;
+// tertiary/destructive stay text-weight. Hover changes color/border only — never size.
 const variants: Record<Variant, string> = {
-  primary: "bg-accent text-white hover:bg-accent-hover border-transparent shadow-sm",
-  secondary: "bg-raised text-ink border-line hover:border-accent/50 shadow-sm",
-  ghost: "bg-transparent text-ink border-transparent hover:bg-accent-soft",
-  danger: "bg-danger-soft text-danger border-transparent hover:brightness-95",
-  warn: "bg-warn-soft text-warn border-transparent hover:brightness-95",
+  primary: "bg-accent text-on-accent hover:bg-accent-hover border-transparent font-semibold",
+  secondary: "bg-transparent text-ink-soft border-line-button hover:border-faint hover:text-ink",
+  ghost: "bg-transparent text-muted-2 border-transparent hover:text-ink hover:bg-accent-soft",
+  danger: "bg-transparent text-danger border-transparent hover:text-danger-hover",
+  warn: "bg-warn-soft text-warn border-(--warn-border) hover:brightness-110",
 };
 
 const sizes: Record<Size, string> = {
@@ -33,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || busy}
       className={cn(
-        "inline-flex items-center justify-center rounded-[10px] border font-medium",
+        "inline-flex items-center justify-center rounded-[9px] border font-medium",
         "transition-colors duration-150 select-none whitespace-nowrap",
         "disabled:opacity-50 disabled:pointer-events-none",
         variants[variant],

@@ -26,6 +26,7 @@ test("onboarding with demo data reaches the cockpit", async ({ page }) => {
   await expect(page.getByTestId("greeting")).toContainText("Alex");
   await expect(page.getByTestId("what-matters")).toBeVisible();
   await expect(page.getByTestId("safe-mode-pill")).toContainText("Safe Mode on");
+  await expect(page.getByTestId("home-composer")).toBeVisible(); // R4-F12: compat id preserved
 
   // isolate write-backs: point the ideas folder at a copy inside the e2e data dir
   fs.mkdirSync(e2eIdeasDir, { recursive: true });
@@ -68,7 +69,7 @@ test("home screen is keyboard accessible and passes axe", async ({ page }) => {
   // Cmd+K palette opens and navigates
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
-  await page.getByLabel("Palette search").fill("skills");
+  await page.getByLabel("Palette search").fill("agents"); // executive label for /skills
   await page.keyboard.press("Enter");
   await page.waitForURL("**/skills");
 
@@ -77,6 +78,20 @@ test("home screen is keyboard accessible and passes axe", async ({ page }) => {
     .analyze();
   const serious = results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""));
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
+});
+
+test("command palette routes a required-input agent to its form, not a failed run (R4-F5)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("greeting")).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+  await page.getByLabel("Palette search").fill("decision memo");
+  await page.keyboard.press("Enter");
+
+  // Decision Memo requires input — the palette must open its form, not create a doomed run.
+  await page.waitForURL("**/skills/decision-memo");
+  await expect(page.getByTestId("skill-input-json")).toBeVisible();
 });
 
 test("project pulse runs to completion with sourced results", async ({ page }) => {

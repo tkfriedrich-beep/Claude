@@ -4,16 +4,21 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { cn, fmtDate, fmtTime, RUN_STATUS_STYLE } from "@/lib/utils";
+import { fmtDate, fmtTime, RUN_STATUS_STYLE } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { SegmentedControl } from "@/components/ui/segmented";
 import { CardSkeleton, EmptyState, ErrorState } from "@/components/ui/states";
 import { Clock } from "lucide-react";
 
+// Filter values double as the /runs?status= list the control plane expects.
 const FILTERS = [
-  { key: "", label: "All" },
-  { key: "completed", label: "Completed" },
-  { key: "awaiting_approval,executing,queued,triaging,planning,verifying,reviewing", label: "Active" },
-  { key: "failed,cancelled,interrupted", label: "Attention" },
+  { value: "", label: "ALL" },
+  { value: "completed", label: "COMPLETED" },
+  { value: "failed,cancelled,interrupted", label: "ATTENTION" },
+  {
+    value: "awaiting_approval,executing,queued,triaging,planning,verifying,reviewing",
+    label: "ACTIVE",
+  },
 ];
 
 export default function HistoryPage() {
@@ -25,34 +30,27 @@ export default function HistoryPage() {
   });
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-[1460px] space-y-[22px]">
       <header>
-        <h1 className="text-xl font-bold tracking-tight">History</h1>
-        <p className="text-[13px] text-muted">
-          Every run — chat turns and skills — with a replayable, human-readable timeline.
+        <h1 className="text-[26px] font-semibold tracking-[-0.3px]">Archive</h1>
+        <p className="mt-1 text-[14px] text-muted">
+          Every run — commands and agents — with a replayable, human-readable timeline.
           Survives restarts.
         </p>
       </header>
 
-      <div role="tablist" aria-label="Run filter" className="flex flex-wrap gap-1 rounded-[12px] border border-line bg-surface p-1 w-fit">
-        {FILTERS.map(({ key, label }) => (
-          <button key={key} role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}
-                  className={cn("rounded-[9px] px-3.5 py-1.5 text-[13px] font-medium",
-                    filter === key ? "bg-accent text-white" : "text-muted hover:text-ink")}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} mono
+                        label="Run filter" />
 
       {isLoading ? (
         <CardSkeleton lines={6} />
       ) : error ? (
         <ErrorState detail={(error as Error).message} onRetry={() => refetch()} />
       ) : (runs ?? []).length === 0 ? (
-        <EmptyState icon={<Clock />} title="No runs yet"
-                    hint="Run a skill or send a command — every execution is recorded here." />
+        <EmptyState icon={<Clock />} title="Nothing in the archive yet."
+                    hint="Run an agent or send a command — every execution is recorded here." />
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-[14px] border border-line bg-surface"
+        <ul className="fadeup divide-y divide-line-row overflow-hidden rounded-[16px] border border-line-card bg-surface"
             data-testid="history-list">
           {(runs ?? []).map((run) => {
             const style = RUN_STATUS_STYLE[run.status] ?? { label: run.status, tone: "muted" as const };
@@ -62,11 +60,13 @@ export default function HistoryPage() {
             return (
               <li key={run.id}>
                 <Link href={`/history/${run.id}`}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-line/20">
+                      className="group flex items-center gap-[18px] px-[30px] py-[17px]">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium">{run.title}</p>
-                    <p className="text-[12px] text-muted">
-                      {run.kind === "skill" ? run.skill_slug : `chat · ${run.provider ?? "—"}`}
+                    <p className="truncate text-[15px] font-medium leading-snug transition-colors group-hover:text-accent-hover">
+                      {run.title}
+                    </p>
+                    <p className="mt-1 truncate font-mono text-[11.5px] text-faint">
+                      {run.kind === "skill" ? run.skill_slug : `command · ${run.provider ?? "—"}`}
                       {" · "}{fmtDate(run.created_at)} {fmtTime(run.created_at)}
                       {duration ? ` · ${duration}` : ""}
                       {run.steps ? ` · ${run.steps} tool calls` : ""}
