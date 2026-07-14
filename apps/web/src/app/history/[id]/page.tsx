@@ -57,11 +57,13 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
   } | null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="fadeup mx-auto max-w-3xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight" data-testid="run-title">{run.title}</h1>
-          <p className="mt-0.5 font-mono text-[11.5px] text-muted">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]" data-testid="run-title">
+            {run.title}
+          </h1>
+          <p className="mt-1.5 font-mono text-[11.5px] tracking-[0.02em] text-muted-2">
             {run.id} · {run.correlation_id ?? "no correlation id"} · started {timeAgo(run.created_at)}
           </p>
         </div>
@@ -93,8 +95,8 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       </div>
 
       {run.status === "interrupted" ? (
-        <Card className="border-warn/50">
-          <CardBody className="pt-4 text-[13.5px]">
+        <Card className="border-(--warn-border) bg-warn-surface">
+          <CardBody className="pt-4 text-[13.5px] leading-relaxed text-ink-soft">
             {run.status_reason ?? "This run was interrupted."} Resuming replays completed steps
             from the audit log — external writes will not re-fire.
           </CardBody>
@@ -108,7 +110,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
         <Card>
           <CardHeader title="Plan" subtitle={plan.assumption ? `Assumption: ${plan.assumption}` : undefined} />
           <CardBody>
-            <ol className="list-decimal space-y-1 pl-5 text-[13.5px]">
+            <ol className="list-decimal space-y-1.5 pl-5 text-[13.5px] text-ink-soft marker:text-faint">
               {plan.steps.map((step, i) => <li key={i}>{step}</li>)}
             </ol>
           </CardBody>
@@ -121,18 +123,20 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
           <CardBody data-testid="run-result">
             <Markdown content={result.summary_md} />
             {result.unresolved?.length ? (
-              <div className="mt-3 rounded-[10px] border border-warn/40 bg-warn-soft/50 px-3.5 py-2.5">
-                <p className="text-[12.5px] font-semibold text-warn">Unresolved</p>
-                <ul className="mt-1 list-disc pl-5 text-[12.5px]">
+              <div className="mt-4 rounded-[11px] border border-(--warn-border) bg-warn-soft px-4 py-3">
+                <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-warn">
+                  Unresolved
+                </p>
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[12.5px] text-ink-soft">
                   {result.unresolved.map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
               </div>
             ) : null}
             {result.sources?.length ? (
-              <div className="mt-3 flex flex-wrap gap-1.5" data-testid="source-chips">
+              <div className="mt-4 flex flex-wrap gap-1.5" data-testid="source-chips">
                 {result.sources.map((source, i) => (
                   <span key={i} title={source.reference}
-                        className="rounded-full border border-line bg-raised px-2.5 py-1 font-mono text-[11px] text-muted">
+                        className="rounded-full border border-line-control px-2.5 py-1 font-mono text-[10.5px] tracking-[0.04em] text-muted-2">
                     {source.label}
                   </span>
                 ))}
@@ -148,20 +152,20 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
           <CardHeader
             title="Verification"
             action={
-              <Badge tone={verification.passed ? "accent" : "danger"}>
+              <Badge tone={verification.passed ? "ok" : "danger"}>
                 {verification.passed ? "passed" : "failed"}
               </Badge>
             }
           />
           <CardBody>
-            <ul className="space-y-1 text-[13px]">
+            <ul className="space-y-1.5 text-[13px]">
               {(verification.checks ?? []).map((check, i) => (
-                <li key={i} className="flex items-center gap-2">
-                  <span aria-hidden className={check.passed ? "text-accent" : "text-danger"}>
+                <li key={i} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span aria-hidden className={check.passed ? "text-ok" : "text-danger"}>
                     {check.passed ? "✓" : "✗"}
                   </span>
-                  <code className="font-mono text-[12px]">{check.rule}</code>
-                  <span className="text-muted">— {check.detail}</span>
+                  <code className="font-mono text-[12px] text-ink-soft">{check.rule}</code>
+                  <span className="text-[12.5px] text-muted">— {check.detail}</span>
                 </li>
               ))}
             </ul>
@@ -172,7 +176,13 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       <Card>
         <CardHeader
           title="Timeline"
-          subtitle={`mode ${run.mode} · ${run.steps} tool calls · ${run.tokens_in + run.tokens_out} tokens · $${run.cost_usd.toFixed(3)}${run.finished_at ? ` · finished ${fmtTime(run.finished_at)}` : ""}`}
+          subtitle={
+            <span className="font-mono text-[11.5px] tracking-[0.02em]">
+              mode {run.mode} · {run.steps} tool calls · {run.tokens_in + run.tokens_out} tokens
+              {" · "}${run.cost_usd.toFixed(3)}
+              {run.finished_at ? ` · finished ${fmtTime(run.finished_at)}` : ""}
+            </span>
+          }
         />
         <CardBody>
           <RunTimeline runId={run.id} />

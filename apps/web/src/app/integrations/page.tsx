@@ -1,8 +1,9 @@
 "use client";
 
-// Integrations: pick a reasoning provider + model, manage API keys (write-only, local file),
-// and add/edit/remove connectors (MCP servers, n8n webhooks). The policy gateway still decides
-// what may actually run; mocked services are labeled until genuinely connected.
+// Systems (/integrations, was Integrations) — pick a reasoning provider + model, manage API
+// keys (write-only, local file), and add/edit/remove connectors (MCP servers, n8n webhooks).
+// The policy gateway still decides what may actually run; mocked services are labeled until
+// genuinely connected. Same endpoints and controls — presentation only (OttoOS).
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -10,33 +11,50 @@ import type { Connector, ProviderInfo, SecretSlot } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { Badge, RiskBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { CardSkeleton, ErrorState } from "@/components/ui/states";
-import { Cpu, KeyRound, Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  CardSkeleton, EmptyState, ErrorState, SectionLabel, Skeleton,
+} from "@/components/ui/states";
+import { KeyRound, Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
 
+// Health chips (Systems spec): OK gold-outline · MOCK muted · DEGRADED amber · DOWN danger.
 const HEALTH_TONE: Record<string, "accent" | "warn" | "danger" | "muted"> = {
-  ok: "accent", mock: "warn", degraded: "warn", unavailable: "danger", unknown: "muted",
+  ok: "accent", mock: "muted", degraded: "warn", unavailable: "danger", unknown: "muted",
 };
 // Connectors whose registered resources (webhooks / servers) can be listed & removed.
 const RESOURCE_KEY: Record<string, "webhooks" | "servers"> = { n8n: "webhooks", mcp: "servers" };
+
+// Connector identity is a square mono tile — initials derived from the real name.
+function connectorMono(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  const caps = name.replace(/[^A-Z0-9]/g, "");
+  return caps.length >= 2 ? caps.slice(0, 2) : name.slice(0, 2).toUpperCase();
+}
+
+const monoLink =
+  "font-mono text-[11px] font-medium tracking-[0.06em] transition-colors " +
+  "disabled:pointer-events-none disabled:opacity-50";
 
 export default function IntegrationsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const { data: connectors, isLoading, error, refetch } = useQuery({
     queryKey: ["connectors"], queryFn: api.connectors,
   });
+  const list = connectors ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Integrations</h1>
-          <p className="text-[13px] text-muted">
-            Choose who does the thinking, add the keys that unlock services, and wire up the tools
-            Otto can use. The policy gateway still gates every real action.
+    <div className="fadeup mx-auto w-full max-w-6xl space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-semibold tracking-[-0.3px]">Systems</h1>
+          <p className="mt-1 max-w-2xl text-[14px] text-muted">
+            Choose who does the thinking, add the keys that unlock services, and wire up the
+            tools Otto can use. The policy gateway still gates every real action; mocked
+            services are labeled until genuinely connected.
           </p>
         </div>
         <Button variant="primary" onClick={() => setAddOpen(true)}>
@@ -47,28 +65,49 @@ export default function IntegrationsPage() {
       <ProviderCard />
       <SecretsCard />
 
-      <div>
-        <h2 className="mb-2 mt-6 text-[13px] font-semibold uppercase tracking-wide text-muted">
-          Connectors
-        </h2>
+      <section className="space-y-3.5">
+        <div className="flex flex-wrap items-baseline gap-3.5 px-1">
+          <SectionLabel>Connectors</SectionLabel>
+          {!isLoading && !error ? (
+            <span className="text-[13px] text-muted">{list.length} wired</span>
+          ) : null}
+        </div>
         {isLoading ? (
-          <CardSkeleton lines={6} />
+          <div className="grid gap-4 md:grid-cols-2">
+            {[1, 2, 3, 4].map((i) => <CardSkeleton key={i} lines={4} />)}
+          </div>
         ) : error ? (
           <ErrorState detail={(error as Error).message} onRetry={() => refetch()} />
+        ) : list.length === 0 ? (
+          <EmptyState icon={<Plug />} title="Nothing is wired in yet."
+                      hint="Register an MCP server or n8n webhook — every tool it exposes still needs your approval."
+                      action={<Button onClick={() => setAddOpen(true)}>Add MCP / n8n</Button>} />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2" data-testid="connector-grid">
-            {(connectors ?? []).map((connector) => (
+          <div className="grid gap-4 md:grid-cols-2" data-testid="connector-grid">
+            {list.map((connector) => (
               <ConnectorCard key={connector.slug} connector={connector} />
             ))}
           </div>
         )}
-      </div>
+      </section>
       <AddResourceDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }
 
 // ------------------------------------------------------------------ providers
+
+// Mono status tags (Systems spec): SELECTED gold · READY · NEEDS SETUP. Gold marks
+// selection only — availability comes straight from the providers endpoint.
+function providerTag(p: ProviderInfo, selected: boolean): { label: string; cls: string } {
+  if (selected) {
+    return p.available
+      ? { label: "selected · ready", cls: "text-accent-hover" }
+      : { label: "selected · needs setup", cls: "text-danger" };
+  }
+  if (p.available) return { label: "ready", cls: "text-muted" };
+  return { label: "needs setup", cls: p.id === "mock" ? "text-muted-2" : "text-danger" };
+}
 
 function ProviderCard() {
   const queryClient = useQueryClient();
@@ -86,49 +125,62 @@ function ProviderCard() {
   });
 
   return (
-    <Card>
-      <CardHeader title="Reasoning provider"
-                  subtitle="Who does the thinking. Everything runs locally except calls to the provider you pick." />
-      <CardBody className="space-y-3">
-        {isLoading ? (
-          <CardSkeleton lines={3} />
-        ) : error || !data ? (
+    <Card className="px-6 py-5">
+      <SectionLabel>Reasoning providers</SectionLabel>
+      <p className="mt-1.5 text-[13px] text-muted">
+        Who does the thinking. Everything runs locally except calls to the provider you pick.
+      </p>
+      {isLoading ? (
+        <div className="mt-4 grid gap-3.5 sm:grid-cols-2" role="status" aria-label="Loading">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      ) : error || !data ? (
+        <div className="mt-4">
           <ErrorState detail={(error as Error)?.message} onRetry={() => refetch()} />
-        ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2" data-testid="provider-grid">
-              {data.providers.map((p) => (
+        </div>
+      ) : (
+        <>
+          <div data-testid="provider-grid"
+               className="mt-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+            {data.providers.map((p) => {
+              const selected = data.selected_provider === p.id;
+              const tag = providerTag(p, selected);
+              return (
                 <button key={p.id} type="button"
                         onClick={() => patch.mutate({ provider: p.id, model: "" })}
-                        aria-pressed={data.selected_provider === p.id}
+                        aria-pressed={selected}
                         className={cn(
-                          "flex items-start justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-left transition",
-                          data.selected_provider === p.id
-                            ? "border-accent bg-accent-soft/50"
-                            : "border-line bg-raised hover:border-accent/50",
+                          "rounded-[12px] border bg-tile px-5 py-4 text-left transition-colors",
+                          selected
+                            ? "border-(--accent-border)"
+                            : "border-line-card hover:border-line-button",
                         )}>
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-[13.5px] font-medium">
-                      <Cpu className="size-3.5 text-muted" /> {p.name}
-                      <span className="text-[11px] font-normal text-muted">· {p.kind}</span>
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[12px] text-muted">{p.detail}</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="truncate text-[15px] font-medium">{p.name}</span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-2">
+                      {p.kind}
+                    </span>
+                    <span className={cn(
+                      "ml-auto shrink-0 font-mono text-[10.5px] uppercase tracking-[0.05em]",
+                      tag.cls,
+                    )}>
+                      {tag.label}
+                    </span>
                   </div>
-                  <Badge tone={p.available ? "accent" : p.id === "mock" ? "muted" : "danger"}>
-                    {p.available ? "ready" : "needs setup"}
-                  </Badge>
+                  <p className="mt-1.5 line-clamp-2 text-[12.5px] text-muted">{p.detail}</p>
                 </button>
-              ))}
-            </div>
-            <ProviderConfig
-              provider={data.providers.find((p) => p.id === data.selected_provider)}
-              selectedModel={data.selected_model}
-              onModel={(model) => patch.mutate({ model })}
-              onSaved={invalidate}
-            />
-          </>
-        )}
-      </CardBody>
+              );
+            })}
+          </div>
+          <ProviderConfig
+            provider={data.providers.find((p) => p.id === data.selected_provider)}
+            selectedModel={data.selected_model}
+            onModel={(model) => patch.mutate({ model })}
+            onSaved={invalidate}
+          />
+        </>
+      )}
     </Card>
   );
 }
@@ -144,7 +196,7 @@ function ProviderConfig({ provider, selectedModel, onModel, onSaved }: {
     : [selectedModel, ...provider.models];
 
   return (
-    <div className="space-y-3 rounded-[10px] border border-line bg-surface px-3.5 py-3">
+    <div className="mt-3.5 space-y-3.5 rounded-[12px] border border-line bg-tile px-5 py-4">
       {needsKey ? (
         <InlineSecret name={provider.requires_secret!} label={`${provider.name} API key`}
                       hint="Stored in a local, gitignored file (data/local/secrets.env) — never in the database or logs."
@@ -152,7 +204,8 @@ function ProviderConfig({ provider, selectedModel, onModel, onSaved }: {
       ) : provider.requires_secret ? (
         <p className="text-[12.5px] text-muted">
           <KeyRound className="mr-1 inline size-3.5" />
-          {provider.requires_secret} is configured. Manage it under Secrets below.
+          <span className="font-mono text-[12px] text-ink-soft">{provider.requires_secret}</span>
+          {" "}is configured. Manage it under Secrets below.
         </p>
       ) : null}
 
@@ -181,18 +234,33 @@ function ProviderConfig({ provider, selectedModel, onModel, onSaved }: {
 // ------------------------------------------------------------------ secrets
 
 function SecretsCard() {
-  const { data, isLoading } = useQuery({ queryKey: ["secrets"], queryFn: api.secrets });
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["secrets"], queryFn: api.secrets,
+  });
+  const slots = data?.secrets ?? [];
   return (
-    <Card>
-      <CardHeader title="Secrets"
-                  subtitle="API keys and webhook secrets. Values are write-only — saved to a local 0600 file, never shown back, never committed or logged." />
-      <CardBody className="space-y-2">
+    <Card className="px-6 py-5">
+      <SectionLabel>Secrets</SectionLabel>
+      <p className="mt-1.5 text-[13px] text-muted">
+        API keys and webhook secrets. Values are write-only — saved to a local 0600 file, never
+        shown back, never committed or logged.
+      </p>
+      <div className="mt-4 space-y-2.5">
         {isLoading ? (
-          <CardSkeleton lines={3} />
+          <div className="space-y-2.5" role="status" aria-label="Loading">
+            <Skeleton className="h-14" />
+            <Skeleton className="h-14" />
+          </div>
+        ) : error ? (
+          <ErrorState detail={(error as Error).message} onRetry={() => refetch()} />
+        ) : slots.length === 0 ? (
+          <p className="text-[13px] text-muted">
+            No secret slots yet — provider and connector keys appear here.
+          </p>
         ) : (
-          (data?.secrets ?? []).map((slot) => <SecretRow key={slot.name} slot={slot} />)
+          slots.map((slot) => <SecretRow key={slot.name} slot={slot} />)
         )}
-      </CardBody>
+      </div>
     </Card>
   );
 }
@@ -211,17 +279,18 @@ function SecretRow({ slot }: { slot: SecretSlot }) {
   });
 
   return (
-    <div className="rounded-[10px] border border-line bg-raised px-3.5 py-2.5">
+    <div className="rounded-[11px] border border-line-row bg-tile px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 font-mono text-[12.5px]">{slot.name}
+          <p className="flex flex-wrap items-center gap-2 font-mono text-[12.5px] text-ink-soft">
+            {slot.name}
             {slot.configured
               ? <Badge tone={slot.source === "env" ? "outline" : "accent"}>
                   {slot.source === "env" ? "from environment" : "set"}
                 </Badge>
               : <Badge tone="muted">not set</Badge>}
           </p>
-          <p className="mt-0.5 text-[12px] text-muted">{slot.description}</p>
+          <p className="mt-1 text-[12px] text-muted">{slot.description}</p>
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
@@ -236,12 +305,12 @@ function SecretRow({ slot }: { slot: SecretSlot }) {
         </div>
       </div>
       {slot.source === "env" ? (
-        <p className="mt-1 text-[11.5px] text-muted">
+        <p className="mt-1 text-[11.5px] text-faint">
           Set in your shell environment — it overrides any value saved here. Unset it there to change it.
         </p>
       ) : null}
       {editing ? (
-        <div className="mt-2">
+        <div className="mt-2.5">
           <InlineSecret name={slot.name} label="" onSaved={() => { setEditing(false); invalidate(); }} />
         </div>
       ) : null}
@@ -295,61 +364,75 @@ function ConnectorCard({ connector }: { connector: Connector }) {
   });
 
   return (
-    <Card className={cn(!connector.enabled && "opacity-60")} data-testid={`connector-${connector.slug}`}>
-      <CardBody className="flex h-full flex-col gap-2.5 pt-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-[9px] bg-accent-soft text-accent">
-              <Plug className="size-4" />
-            </span>
-            <div>
-              <p className="text-[14.5px] font-semibold">{connector.name}</p>
-              <p className="text-[11.5px] text-muted">{connector.category}</p>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <Badge tone={HEALTH_TONE[connector.health] ?? "muted"}>{connector.health}</Badge>
-            {isMock ? <Badge tone="outline">mock — demo data</Badge> : null}
-          </div>
+    <Card className={cn("flex flex-col px-6 py-5", !connector.enabled && "opacity-60")}
+          data-testid={`connector-${connector.slug}`}>
+      <div className="flex items-start gap-3">
+        <span aria-hidden
+              className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line-button font-mono text-[11px] font-medium text-accent-hover">
+          {connectorMono(connector.name)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15.5px] font-semibold tracking-[-0.01em]">{connector.name}</p>
+          <p className="mt-0.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-2">
+            {connector.category}
+          </p>
         </div>
-
-        <p className="text-[12.5px] text-muted">{connector.health_detail || manifest?.description}</p>
-        <p className="text-[11.5px] text-muted">
-          last ok: {connector.last_success_at ? timeAgo(connector.last_success_at) : "never"}
-          {resourceKey ? ` · ${resources.length} registered` : ""}
-          {" · "}scopes: {(manifest?.required_scopes ?? []).join(", ") || "local"}
-        </p>
-
-        <div className="mt-auto flex flex-wrap items-center gap-3 border-t border-line pt-2.5">
-          <label className="flex items-center gap-1.5 text-[12px] text-muted">
-            enabled
-            <Switch checked={connector.enabled} label={`${connector.name} enabled`}
-                    onChange={(v) => patch.mutate({ enabled: v })} />
-          </label>
-          <label className="flex items-center gap-1.5 text-[12px] text-muted">
-            read-only
-            <Switch checked={connector.mode === "read_only"} label={`${connector.name} read-only`}
-                    onChange={(v) => patch.mutate({ mode: v ? "read_only" : "read_write" })} />
-          </label>
-          <div className="ml-auto flex gap-1.5">
-            {resourceKey ? (
-              <Button size="sm" variant="ghost" onClick={() => setManageOpen(true)}>Manage</Button>
-            ) : null}
-            <Button size="sm" variant="ghost" onClick={() => setToolsOpen(true)}>Tools</Button>
-            <Button size="sm" busy={check.isPending} onClick={() => check.mutate()}
-                    aria-label={`Check ${connector.name} health`}>
-              <RefreshCw className="size-3.5" />
-            </Button>
-          </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <Badge tone={HEALTH_TONE[connector.health] ?? "muted"}>{connector.health}</Badge>
+          {isMock ? <Badge tone="outline">mock — demo data</Badge> : null}
         </div>
-        <ToolsDialog slug={connector.slug} name={connector.name} open={toolsOpen}
-                     onClose={() => setToolsOpen(false)} />
-        {resourceKey ? (
-          <ManageResourcesDialog slug={connector.slug} name={connector.name} resourceKey={resourceKey}
-                                 resources={resources} open={manageOpen}
-                                 onClose={() => setManageOpen(false)} />
-        ) : null}
-      </CardBody>
+      </div>
+
+      <p className="mt-3 min-h-[38px] flex-1 text-[13px] leading-relaxed text-muted">
+        {connector.health_detail || manifest?.description}
+      </p>
+      <p className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.05em] text-muted-2">
+        last ok {connector.last_success_at ? timeAgo(connector.last_success_at) : "never"}
+        {" · "}scopes {(manifest?.required_scopes ?? []).join(", ") || "local"}
+        {resourceKey ? ` · ${resources.length} registered` : ""}
+      </p>
+
+      <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line-row pt-3.5">
+        <label className="flex items-center gap-2 text-[12.5px] text-muted">
+          enabled
+          <Switch checked={connector.enabled} label={`${connector.name} enabled`}
+                  onChange={(v) => patch.mutate({ enabled: v })} />
+        </label>
+        <label className="flex items-center gap-2 text-[12.5px] text-muted">
+          read-only
+          <Switch checked={connector.mode === "read_only"} label={`${connector.name} read-only`}
+                  onChange={(v) => patch.mutate({ mode: v ? "read_only" : "read_write" })} />
+        </label>
+        <div className="ml-auto flex shrink-0 items-center gap-3.5">
+          {resourceKey ? (
+            <button type="button" onClick={() => setManageOpen(true)}
+                    className={cn(monoLink, "text-muted-2 hover:text-ink")}>
+              MANAGE
+            </button>
+          ) : null}
+          <button type="button" onClick={() => setToolsOpen(true)}
+                  className={cn(monoLink, "text-accent hover:text-accent-hover")}>
+            TOOLS
+          </button>
+          <button type="button" onClick={() => check.mutate()} disabled={check.isPending}
+                  aria-label={`Check ${connector.name} health`}
+                  className={cn(monoLink, "text-accent hover:text-accent-hover")}>
+            {check.isPending ? (
+              <span aria-hidden
+                    className="block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : (
+              <RefreshCw aria-hidden className="size-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+      <ToolsDialog slug={connector.slug} name={connector.name} open={toolsOpen}
+                   onClose={() => setToolsOpen(false)} />
+      {resourceKey ? (
+        <ManageResourcesDialog slug={connector.slug} name={connector.name} resourceKey={resourceKey}
+                               resources={resources} open={manageOpen}
+                               onClose={() => setManageOpen(false)} />
+      ) : null}
     </Card>
   );
 }
@@ -374,9 +457,9 @@ function ManageResourcesDialog({ slug, name, resourceKey, resources, open, onClo
         <ul className="space-y-2">
           {resources.map((r) => (
             <li key={r.name}
-                className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-raised px-3.5 py-2.5">
+                className="flex items-center justify-between gap-3 rounded-[11px] border border-line-row bg-tile px-4 py-3">
               <div className="min-w-0">
-                <p className="font-mono text-[12.5px]">{r.name}</p>
+                <p className="font-mono text-[12.5px] text-ink-soft">{r.name}</p>
                 <p className="truncate text-[12px] text-muted">
                   {r.url || r.command || r.transport || noun}
                   {r.read_only ? " · read-only" : ""}
@@ -418,10 +501,10 @@ function ToolsDialog({ slug, name, open, onClose }: {
         <ul className="space-y-2">
           {tools.map((tool) => (
             <li key={tool.tool_id}
-                className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-raised px-3.5 py-2.5">
+                className="flex items-center justify-between gap-3 rounded-[11px] border border-line-row bg-tile px-4 py-3">
               <div className="min-w-0">
-                <p className="font-mono text-[12.5px]">{tool.tool_id}</p>
-                <p className="text-[12px] text-muted">{tool.name}</p>
+                <p className="font-mono text-[12.5px] text-ink-soft">{tool.tool_id}</p>
+                <p className="mt-0.5 text-[12px] text-muted">{tool.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {!tool.trusted ? (
@@ -473,9 +556,10 @@ function AddResourceDialog({ open, onClose }: { open: boolean; onClose: () => vo
             <option value="n8n_webhook">n8n webhook</option>
           </Select>
         </Field>
-        <p className="rounded-[10px] border border-line bg-raised px-3 py-2 text-[12px] text-muted">
-          Tools you register here are <strong>untrusted</strong>: every call needs your approval,
-          even if labeled read-only. To let one run automatically, add an allow rule in
+        <p className="rounded-[11px] border border-(--warn-border) bg-warn-surface px-4 py-3 text-[12.5px] leading-relaxed text-muted">
+          Tools you register here are{" "}
+          <strong className="font-semibold text-warn">untrusted</strong>: every call needs your
+          approval, even if labeled read-only. To let one run automatically, add an allow rule in
           Settings → Policies.
         </p>
         <Field label="Name" hint="Letters, numbers, dashes and underscores.">
@@ -498,7 +582,7 @@ function AddResourceDialog({ open, onClose }: { open: boolean; onClose: () => vo
               <Input value={secretEnv} onChange={(e) => setSecretEnv(e.target.value)}
                      placeholder="COCKPIT_N8N_SECRET_MYFLOW" />
             </Field>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-[13px]">Read-only workflow (no external side effects)</span>
               <Switch checked={readOnly} onChange={setReadOnly} label="Read-only workflow" />
             </div>

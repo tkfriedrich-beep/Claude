@@ -312,7 +312,7 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
 - [x] Live smoke: secret saved at 0600 and absent from the DB; OpenAI flips to available once
       keyed; n8n webhook add→remove; model persists across settings reads
 
-### M7 — OttoOS visual redesign (presentation layer, ADR-019) — ◐ (2026-07-13)
+### M7 — OttoOS visual redesign (presentation layer, ADR-019) — ✅ (2026-07-14)
 
 - [x] Foundations: champagne-gold/graphite token system (hairline + ink ladders, judgment
       amber, ok/diff tones) under the same custom-property names; dark "midnight graphite"
@@ -324,15 +324,16 @@ chat run on mock runtime streamed deltas and exercised the gateway permission br
       modes (ESC exits); ambient rail (inline approve, live timeline, systems dots, counts);
       expanded ⌘K palette (GO TO/RUN/CONTROL/MODE); canonical decision card (Modify hook,
       diff +/- coloring, a/d keys); champagne-sphere Otto pulse, same state semantics
-- [x] Screens restyled (9): Briefing, Command (band handoff via searchParams), Missions,
+- [x] All 13 screens restyled: Briefing, Command (band handoff via searchParams), Missions,
       Agents (+detail autonomy ladder), Decisions (live tab tallies), Calendar,
-      Relationships (real next-touch derivation), Knowledge, Automations — nothing removed,
-      testids kept, no fabricated data (backend-less spec slots omitted per ADR-019)
+      Relationships (real next-touch derivation), Knowledge, Automations, Systems (provider
+      tiles + write-only Secrets + connector monogram cards — ADR-018 features intact),
+      Archive (+run detail, "Verification"/"Unresolved" kept), Settings (segmented exec mode,
+      MIDNIGHT/PARCHMENT theme, all controls), Onboarding (retoken, flow + testids intact) —
+      nothing removed, testids kept, no fabricated data (backend-less spec slots omitted
+      per ADR-019)
 - [x] Gates: web tsc + eslint clean; vitest 6 passed; `next build` 16/16; unit/e2e specs
-      updated for renamed labels; live visual smoke against a real control plane (briefing +
-      decisions screenshots verified)
-- [ ] Remaining screens (layouts keep current structure, tokens already applied globally):
-      Systems (/integrations), Archive (/history), Settings, Onboarding — restyle pass
-      pending (fan-out interrupted by account spend limit)
+      updated for renamed labels; live visual smoke against a real control plane (briefing,
+      decisions, systems, settings, archive screenshots verified)
 - [ ] Spec step-6 backend follow-ups: approvals defer, mission progress/milestone/confidence,
       briefing synthesis fields, people next_touch service-side
