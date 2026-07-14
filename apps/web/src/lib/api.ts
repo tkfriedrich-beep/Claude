@@ -27,8 +27,21 @@ import type {
   UsageResponse,
 } from "@/lib/types";
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8787";
+// Resolve the control-plane base URL. If NEXT_PUBLIC_API_URL is set it wins (deploys, e2e).
+// Otherwise, in the browser, use the SAME host the page was served from with the control-plane
+// port — so reaching the cockpit from another device (a phone over Tailscale/LAN) needs zero
+// per-device config: "localhost" on a phone is the phone, but window.location.hostname is the
+// machine actually running Otto. Falls back to localhost during SSR / tests.
+function resolveApiUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:8787`;
+  }
+  return "http://localhost:8787";
+}
+
+export const API_URL = resolveApiUrl();
 
 export class ApiError extends Error {
   status: number;

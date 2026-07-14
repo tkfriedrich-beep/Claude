@@ -74,6 +74,31 @@ Storage afterwards). Read access only until you approve writes.
 | Playwright wants to download browsers | don't; Chromium is preinstalled (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` in CI/sandbox) |
 | SSE not updating behind a proxy | use direct localhost; proxies must not buffer `text/event-stream` |
 
+## View on your phone (Tailscale)
+
+The cockpit is local-first, but you can reach it from your phone over a private
+[Tailscale](https://tailscale.com) tailnet — no ports opened to the internet.
+
+1. Install Tailscale on the Mac running Otto **and** on your phone; sign both into the same
+   account. Note the Mac's name in the Tailscale app (e.g. `toms-imac`) — its full MagicDNS
+   name is `toms-imac.<your-tailnet>.ts.net`, or use its `100.x.y.z` tailnet IP.
+2. On the Mac, start Otto bound to a reachable interface:
+   ```bash
+   make phone            # binds to all interfaces (LAN + tailnet)
+   # or, tailnet-ONLY (not reachable on your home Wi-Fi):
+   make phone PHONE_HOST=100.x.y.z    # your Mac's Tailscale IP
+   ```
+3. On your phone's browser, open **`http://toms-imac.<your-tailnet>.ts.net:3000`**
+   (or `http://100.x.y.z:3000`). That's it — the UI derives the control-plane URL from the
+   host you loaded, and CORS already allows tailnet origins, so no per-device config is needed.
+
+**Security:** `make phone` makes the *unauthenticated* control plane reachable to anything on
+that network. Keep **Safe Mode ON** (external writes stay blocked; every action is still
+approval-gated). Do **not** run `tailscale funnel` on these ports — that would publish Otto to
+the public internet. Prefer `PHONE_HOST=<tailscale-ip>` to keep it off your local Wi-Fi. For
+HTTPS with a real cert, `tailscale serve` is an option but needs both ports proxied under one
+name (out of scope here).
+
 ## Operational safety
 
 - **Safe Mode** (Settings or home header) blocks all external writes regardless of skill config.
