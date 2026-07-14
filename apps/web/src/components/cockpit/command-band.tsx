@@ -132,13 +132,17 @@ export function CommandBand() {
                 className="min-w-[160px] flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted/70"
               />
               <div className="flex flex-none flex-wrap items-center gap-2.5">
-                <SegmentedControl
-                  options={AUTONOMY.map((a) => ({ value: a.value, label: a.label }))}
-                  value={autonomy}
-                  onChange={(v) => setAutonomy(v)}
-                  label="Autonomy"
-                  className="hidden md:inline-flex"
-                />
+                {/* Wrap for responsive visibility: SegmentedControl already sets `inline-flex`
+                    on itself, so putting `hidden` on it too is a base/base display conflict that
+                    source order (not class order) resolves — hide via a wrapper instead. */}
+                <div className="hidden md:block">
+                  <SegmentedControl
+                    options={AUTONOMY.map((a) => ({ value: a.value, label: a.label }))}
+                    value={autonomy}
+                    onChange={(v) => setAutonomy(v)}
+                    label="Autonomy"
+                  />
+                </div>
                 <button
                   onClick={() => submit(true)}
                   className="hidden rounded-[9px] border border-line-button px-4 py-2 text-[13.5px] font-medium text-ink-soft hover:border-faint hover:text-ink sm:block"
