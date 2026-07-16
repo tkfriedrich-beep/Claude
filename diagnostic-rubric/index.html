@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pediatric Diagnostic Rubric: ADHD vs DMDD vs Bipolar</title>
+<style>
+  :root {
+    --adhd: #3b82f6;
+    --dmdd: #f59e0b;
+    --pbd: #ef4444;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --phase1: #6366f1;
+    --phase2: #ec4899;
+    --phase3: #14b8a6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 16px 80px;
+  }
+
+  header {
+    text-align: center;
+    padding: 32px 0 24px;
+  }
+
+  header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  header p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .disclaimer {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    font-size: 0.88rem;
+    color: #92400e;
+  }
+
+  .disclaimer strong { display: block; margin-bottom: 4px; }
+
+  .phase {
+    margin-bottom: 32px;
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .phase-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 10px;
+    border-radius: 20px;
+    color: #fff;
+  }
+
+  .phase-1 .phase-badge { background: var(--phase1); }
+  .phase-2 .phase-badge { background: var(--phase2); }
+  .phase-3 .phase-badge { background: var(--phase3); }
+
+  .phase-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+
+  .phase-desc {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+  }
+
+  .question-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 14px;
+    transition: box-shadow 0.2s;
+  }
+
+  .question-card:hover {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+
+  .question-card.answered {
+    border-color: #a5b4fc;
+    background: #fafaff;
+  }
+
+  .question-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.9rem;
+  }
+
+  .option:hover { border-color: #94a3b8; background: #f1f5f9; }
+
+  .option.selected { border-color: var(--phase1); background: #eef2ff; }
+  .phase-2 .option.selected { border-color: var(--phase2); background: #fdf2f8; }
+  .phase-3 .option.selected { border-color: var(--phase3); background: #f0fdfa; }
+
+  .option input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--phase1);
+    flex-shrink: 0;
+  }
+  .phase-2 .option input[type="radio"] { accent-color: var(--phase2); }
+  .phase-3 .option input[type="radio"] { accent-color: var(--phase3); }
+
+  .option-text { flex: 1; }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+    color: #fff;
+  }
+
+  .tag-adhd { background: var(--adhd); }
+  .tag-dmdd { background: var(--dmdd); color: #78350f; }
+  .tag-pbd { background: var(--pbd); }
+  .tag-adhd-dmdd { background: linear-gradient(90deg, var(--adhd), var(--dmdd)); color: #fff; }
+
+  /* Results */
+  .results-panel {
+    position: sticky;
+    bottom: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    padding: 16px 0;
+    margin: 0 -16px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+    z-index: 10;
+  }
+
+  .results-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .progress-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--phase1), var(--phase2), var(--phase3));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+
+  .scores {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .score-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+  }
+
+  .score-chip.adhd-chip { background: #dbeafe; color: #1e40af; }
+  .score-chip.dmdd-chip { background: #fef3c7; color: #92400e; }
+  .score-chip.pbd-chip { background: #fee2e2; color: #991b1b; }
+
+  .score-chip.leading {
+    transform: scale(1.08);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+
+  .score-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .adhd-chip .score-dot { background: var(--adhd); }
+  .dmdd-chip .score-dot { background: var(--dmdd); }
+  .pbd-chip .score-dot { background: var(--pbd); }
+
+  /* Interpretation */
+  #interpretation {
+    display: none;
+    margin-top: 32px;
+    margin-bottom: 80px;
+  }
+
+  #interpretation.visible { display: block; }
+
+  .interp-card {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+
+  .interp-card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+  }
+
+  .interp-primary {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .interp-note {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+
+  .interp-detail {
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 3px solid var(--border);
+  }
+
+  .interp-detail strong { display: block; margin-bottom: 2px; }
+
+  .caveat-list {
+    list-style: none;
+    margin-top: 16px;
+  }
+
+  .caveat-list li {
+    font-size: 0.88rem;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .caveat-list li:last-child { border-bottom: none; }
+  .caveat-list li strong { color: var(--text); }
+
+  /* Comparison table */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0 0;
+    font-size: 0.85rem;
+  }
+
+  .comp-table th, .comp-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .comp-table th {
+    background: #f1f5f9;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .comp-table td:first-child { font-weight: 600; }
+
+  .reset-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+
+  .reset-btn:hover { background: #e2e8f0; }
+
+  @media (max-width: 600px) {
+    .scores { flex-direction: column; align-items: stretch; }
+    .score-chip { justify-content: center; }
+    header h1 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Pediatric Diagnostic Rubric</h1>
+    <p>Differentiating ADHD, DMDD, and Pediatric Bipolar Disorder in children. Answer each question to generate a weighted scoring profile.</p>
+  </header>
+
+  <div class="disclaimer">
+    <strong>Clinical Disclaimer</strong>
+    This tool is for educational and screening purposes only. It is not a substitute for longitudinal clinical observation. No parent questionnaire replaces a qualified clinician's assessment across at least 6 months of different environments.
+  </div>
+
+  <div id="questions-container"></div>
+
+  <div id="interpretation">
+    <div class="interp-card">
+      <h2>Interpretation</h2>
+      <div id="interp-body"></div>
+    </div>
+  </div>
+</div>
+
+<div class="results-panel">
+  <div class="results-inner">
+    <div class="progress-row">
+      <span class="progress-label" id="progress-text">0 / 8 answered</span>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    </div>
+    <div class="scores">
+      <div class="score-chip adhd-chip"><span class="score-dot"></span>ADHD: <span id="score-adhd">0</span></div>
+      <div class="score-chip dmdd-chip"><span class="score-dot"></span>DMDD: <span id="score-dmdd">0</span></div>
+      <div class="score-chip pbd-chip"><span class="score-dot"></span>PBD: <span id="score-pbd">0</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  // Phase 1: Chronicity vs Episodicity
+  {
+    phase: 1,
+    label: "Is your child's high energy, distractibility, and impulsivity present almost every day, or does it come in distinct \"waves\" that last 4\u20137 days?",
+    options: [
+      { text: "Present almost every day, consistently since early childhood", scores: { adhd: 3, dmdd: 1, pbd: 0 }, tags: ["adhd"] },
+      { text: "Comes in distinct waves or \u201cchapters\u201d lasting 4\u20137 days, with clear periods of normalcy between", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "Constantly present but with additional worsening episodes", scores: { adhd: 1, dmdd: 2, pbd: 1 }, tags: ["dmdd"] }
+    ]
+  },
+  {
+    phase: 1,
+    label: "When your child sleeps very little (3\u20135 hours), how do they wake up?",
+    options: [
+      { text: "Exhausted and grumpy \u2014 clearly sleep-deprived", scores: { adhd: 2, dmdd: 2, pbd: 0 }, tags: ["adhd", "dmdd"] },
+      { text: "With seemingly \u201climitless\u201d energy, as if they had a full night\u2019s rest", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "My child generally sleeps normally / not applicable", scores: { adhd: 1, dmdd: 1, pbd: 0 }, tags: [] }
+    ]
+  },
+  {
+    phase: 1,
+    label: "Does your child show \u201csuperpower\u201d beliefs \u2014 insisting they can fly, have special knowledge, or are the boss of adults?",
+    options: [
+      { text: "Yes, but only during specific, time-limited periods", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "They boast and exaggerate, but it\u2019s general over-excitement, not a fixed belief", scores: { adhd: 3, dmdd: 0, pbd: 0 }, tags: ["adhd"] },
+      { text: "No grandiosity or boasting observed", scores: { adhd: 0, dmdd: 1, pbd: 0 }, tags: [] }
+    ]
+  },
+
+  // Phase 2: Affective Storm
+  {
+    phase: 2,
+    label: "Between outbursts, what is your child\u2019s \u201cresting state\u201d mood?",
+    options: [
+      { text: "Generally happy, curious, and \u201cnormal\u201d \u2014 the storms pass completely", scores: { adhd: 1, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "Constantly irritable, grumpy, or angry \u2014 the family feels like they\u2019re \u201cwalking on eggshells\u201d", scores: { adhd: 0, dmdd: 3, pbd: 0 }, tags: ["dmdd"] },
+      { text: "Energetic and distracted but not particularly angry", scores: { adhd: 3, dmdd: 0, pbd: 0 }, tags: ["adhd"] }
+    ]
+  },
+  {
+    phase: 2,
+    label: "How frequent and widespread are the meltdowns?",
+    options: [
+      { text: "3 or more times per week, in multiple settings (home and school), for over a year", scores: { adhd: 0, dmdd: 3, pbd: 0 }, tags: ["dmdd"] },
+      { text: "Concentrated into intense week-long episodes of \u201chighs\u201d or \u201clows\u201d with calmer gaps", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "Occasional meltdowns, mainly when frustrated or overstimulated", scores: { adhd: 2, dmdd: 1, pbd: 0 }, tags: ["adhd"] }
+    ]
+  },
+  {
+    phase: 2,
+    label: "What typically triggers the outbursts?",
+    options: [
+      { text: "Usually a reaction to being told \u201cno,\u201d a transition, or a change in routine", scores: { adhd: 2, dmdd: 2, pbd: 0 }, tags: ["adhd", "dmdd"] },
+      { text: "Sometimes occur \u201cout of the blue\u201d with zero environmental trigger", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "A mix of triggered and seemingly unprovoked episodes", scores: { adhd: 0, dmdd: 1, pbd: 2 }, tags: ["pbd"] }
+    ]
+  },
+
+  // Phase 3: Functional Impairment
+  {
+    phase: 3,
+    label: "After an outburst, does the child feel remorse or shame?",
+    options: [
+      { text: "Yes \u2014 they feel genuinely sorry and remorseful almost immediately", scores: { adhd: 3, dmdd: 0, pbd: 0 }, tags: ["adhd"] },
+      { text: "No \u2014 they seem \u201centitled\u201d to their anger or unaware the behavior was unusual", scores: { adhd: 0, dmdd: 2, pbd: 2 }, tags: ["dmdd", "pbd"] },
+      { text: "Sometimes remorseful, sometimes not \u2014 it depends on the episode", scores: { adhd: 1, dmdd: 1, pbd: 1 }, tags: [] }
+    ]
+  },
+  {
+    phase: 3,
+    label: "If a stimulant medication (e.g., Ritalin) was tried, what was the effect?",
+    options: [
+      { text: "Improved focus, reduced impulsivity \u2014 clearly helpful", scores: { adhd: 3, dmdd: 0, pbd: 0 }, tags: ["adhd"] },
+      { text: "Caused a \u201cmanic switch\u201d \u2014 aggression, fast speech, decreased need for sleep", scores: { adhd: 0, dmdd: 0, pbd: 3 }, tags: ["pbd"] },
+      { text: "No significant change, or stimulant not yet tried", scores: { adhd: 0, dmdd: 1, pbd: 0 }, tags: [] }
+    ]
+  }
+];
+
+const PHASE_META = {
+  1: { title: "Chronicity vs. Episodicity Filter", desc: "Differentiates ADHD (constant) from Bipolar Disorder (cyclical)." },
+  2: { title: "Affective Storm Filter", desc: "Differentiates DMDD (chronic irritability) from Bipolar Disorder (episodic mania)." },
+  3: { title: "Functional Impairment Filter", desc: "Identifies the functional \u201csingle point of failure\u201d in the child\u2019s environment." }
+};
+
+const TAG_CLASSES = { adhd: "tag-adhd", dmdd: "tag-dmdd", pbd: "tag-pbd" };
+const TAG_LABELS = { adhd: "ADHD", dmdd: "DMDD", pbd: "PBD" };
+
+const state = { answers: new Array(QUESTIONS.length).fill(null) };
+
+function render() {
+  const container = document.getElementById("questions-container");
+  container.innerHTML = "";
+
+  let currentPhase = 0;
+  QUESTIONS.forEach((q, qi) => {
+    if (q.phase !== currentPhase) {
+      currentPhase = q.phase;
+      const meta = PHASE_META[currentPhase];
+      const phaseDiv = document.createElement("div");
+      phaseDiv.className = `phase phase-${currentPhase}`;
+      phaseDiv.innerHTML = `
+        <div class="phase-header">
+          <span class="phase-badge">Phase ${currentPhase}</span>
+          <span class="phase-title">${meta.title}</span>
+        </div>
+        <p class="phase-desc">${meta.desc}</p>
+      `;
+      container.appendChild(phaseDiv);
+    }
+
+    const card = document.createElement("div");
+    card.className = "question-card" + (state.answers[qi] !== null ? " answered" : "");
+    card.dataset.phase = q.phase;
+
+    let optionsHtml = q.options.map((opt, oi) => {
+      const selected = state.answers[qi] === oi ? " selected" : "";
+      const checked = state.answers[qi] === oi ? " checked" : "";
+      const tagHtml = opt.tags.map(t => {
+        const cls = TAG_CLASSES[t] || "";
+        const label = TAG_LABELS[t] || t.toUpperCase();
+        return `<span class="tag ${cls}">${label}</span>`;
+      }).join("");
+      return `<label class="option${selected}" data-qi="${qi}" data-oi="${oi}">
+        <input type="radio" name="q${qi}" value="${oi}"${checked}>
+        <span class="option-text">${opt.text}${tagHtml}</span>
+      </label>`;
+    }).join("");
+
+    card.innerHTML = `
+      <div class="question-label">${qi + 1}. ${q.label}</div>
+      <div class="options">${optionsHtml}</div>
+    `;
+
+    // Find the last phase div
+    const phases = container.querySelectorAll(".phase");
+    const lastPhase = phases[phases.length - 1];
+    lastPhase.appendChild(card);
+  });
+
+  // Event delegation
+  container.querySelectorAll(".option").forEach(el => {
+    el.addEventListener("click", () => {
+      const qi = parseInt(el.dataset.qi);
+      const oi = parseInt(el.dataset.oi);
+      state.answers[qi] = oi;
+      updateScores();
+      render();
+    });
+  });
+
+  updateScores();
+}
+
+function updateScores() {
+  let adhd = 0, dmdd = 0, pbd = 0;
+  let answered = 0;
+
+  state.answers.forEach((a, qi) => {
+    if (a !== null) {
+      answered++;
+      const s = QUESTIONS[qi].options[a].scores;
+      adhd += s.adhd;
+      dmdd += s.dmdd;
+      pbd += s.pbd;
+    }
+  });
+
+  document.getElementById("score-adhd").textContent = adhd;
+  document.getElementById("score-dmdd").textContent = dmdd;
+  document.getElementById("score-pbd").textContent = pbd;
+  document.getElementById("progress-text").textContent = `${answered} / ${QUESTIONS.length} answered`;
+  document.getElementById("progress-fill").style.width = `${(answered / QUESTIONS.length) * 100}%`;
+
+  // Highlight leading score
+  const chips = document.querySelectorAll(".score-chip");
+  chips.forEach(c => c.classList.remove("leading"));
+  if (answered > 0) {
+    const max = Math.max(adhd, dmdd, pbd);
+    if (adhd === max) document.querySelector(".adhd-chip").classList.add("leading");
+    if (dmdd === max) document.querySelector(".dmdd-chip").classList.add("leading");
+    if (pbd === max) document.querySelector(".pbd-chip").classList.add("leading");
+  }
+
+  // Show interpretation when all answered
+  const interpEl = document.getElementById("interpretation");
+  if (answered === QUESTIONS.length) {
+    interpEl.classList.add("visible");
+    renderInterpretation(adhd, dmdd, pbd);
+  } else {
+    interpEl.classList.remove("visible");
+  }
+}
+
+function renderInterpretation(adhd, dmdd, pbd) {
+  const total = adhd + dmdd + pbd;
+  const pctA = total ? Math.round((adhd / total) * 100) : 0;
+  const pctD = total ? Math.round((dmdd / total) * 100) : 0;
+  const pctP = total ? Math.round((pbd / total) * 100) : 0;
+
+  const sorted = [
+    { name: "ADHD", score: adhd, pct: pctA },
+    { name: "DMDD", score: dmdd, pct: pctD },
+    { name: "Pediatric Bipolar Disorder", score: pbd, pct: pctP }
+  ].sort((a, b) => b.score - a.score);
+
+  const primary = sorted[0];
+  const secondary = sorted[1];
+
+  let comorbidNote = "";
+  if (primary.name === "DMDD" && secondary.name === "ADHD" && secondary.pct >= 25) {
+    comorbidNote = `<div class="interp-detail" style="border-left-color: var(--dmdd);">
+      <strong>High Comorbidity Alert</strong>
+      ADHD and DMDD co-occur in approximately 75% of DMDD cases. This profile is consistent with a dual diagnosis.
+    </div>`;
+  } else if (primary.name === "ADHD" && secondary.name === "DMDD" && secondary.pct >= 25) {
+    comorbidNote = `<div class="interp-detail" style="border-left-color: var(--adhd);">
+      <strong>High Comorbidity Alert</strong>
+      ADHD and DMDD co-occur in approximately 75% of DMDD cases. Consider evaluating for comorbid DMDD.
+    </div>`;
+  }
+
+  let dmddTrap = "";
+  if (primary.name === "Pediatric Bipolar Disorder" && dmdd >= adhd) {
+    dmddTrap = `<div class="interp-detail" style="border-left-color: var(--pbd);">
+      <strong>The DMDD Consideration</strong>
+      DMDD was specifically created to prevent the over-diagnosis of Bipolar Disorder in children. If the irritability is chronic rather than clearly episodic, DMDD is the statistically more likely candidate. Confirm episodic cycling before diagnosing PBD.
+    </div>`;
+  }
+
+  const body = document.getElementById("interp-body");
+  body.innerHTML = `
+    <div class="interp-primary">${primary.name} (${primary.score} pts, ${primary.pct}%)</div>
+    <div class="interp-note">Strongest alignment based on rubric responses</div>
+
+    <div class="interp-detail">
+      <strong>Score Breakdown</strong>
+      ${sorted.map(s => `${s.name}: ${s.score} points (${s.pct}%)`).join("<br>")}
+    </div>
+
+    ${comorbidNote}
+    ${dmddTrap}
+
+    <table class="comp-table">
+      <thead>
+        <tr><th>Feature</th><th>ADHD</th><th>DMDD</th><th>Bipolar (PBD)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Primary Mood</td><td>Neutral / Reactive</td><td>Chronically Irritable</td><td>Episodic (High/Low)</td></tr>
+        <tr><td>Outburst Frequency</td><td>Low to Moderate</td><td>High (3+/week)</td><td>Variable (Episodic)</td></tr>
+        <tr><td>Resting State</td><td>Energetic / Distracted</td><td>Angry / On Edge</td><td>Normal / Euthymic</td></tr>
+        <tr><td>Onset</td><td>Before age 7</td><td>Before age 10</td><td>Can be later (rare at 8)</td></tr>
+      </tbody>
+    </table>
+
+    <ul class="caveat-list">
+      <li><strong>The DMDD "Trap":</strong> DMDD was specifically created to prevent the over-diagnosis of Bipolar in children. Chronic irritability favors DMDD over PBD.</li>
+      <li><strong>Comorbidity:</strong> It is highly likely the child has two of these. ADHD and DMDD co-occur in ~75% of DMDD cases.</li>
+      <li><strong>Gold Standard:</strong> No parent questionnaire substitutes for longitudinal observation. Diagnosis should follow at least 6 months of observation across different environments.</li>
+    </ul>
+
+    <button class="reset-btn" onclick="resetAll()">Reset All Answers</button>
+  `;
+}
+
+function resetAll() {
+  state.answers.fill(null);
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+render();
+</script>
+
+</body>
+</html>
