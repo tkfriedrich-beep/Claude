@@ -58,9 +58,10 @@ contracts: ## Regenerate packages/contracts from the FastAPI OpenAPI schema
 	cd $(CP) && uv run python -m cockpit.export_openapi ../../packages/contracts/openapi.json
 	pnpm --filter @agenticos/contracts generate
 
-app: ## Rebuild both Otto launcher icons and mark the launchers executable
+app: ## Rebuild both Otto launcher icons + web/home-screen icons and mark the launchers executable
 	uv run --with pillow python desktop/make_icon.py --variant default
 	uv run --with pillow python desktop/make_icon.py --variant phone
+	uv run --with pillow python desktop/make_icon.py --web
 	chmod +x desktop/Otto.app/Contents/MacOS/Otto "desktop/Otto (Phone).app/Contents/MacOS/Otto Phone"
 	@echo "Otto.app (local, indigo) + 'Otto (Phone).app' (Tailscale, gold) ready — drag to your Desktop; right-click → Open the first time."
 

@@ -115,6 +115,68 @@ def render(size_px: int, pal: dict = PALETTES["default"]) -> Image.Image:
     return img.resize((size_px, size_px), Image.LANCZOS)
 
 
+def render_web(size_px: int, pal: dict = PALETTES["phone"], content_scale: float = 1.0) -> Image.Image:
+    """Full-bleed icon for the web app / phone home screen (no rounded-square inset — iOS and
+    Android apply their own mask). `content_scale` < 1 shrinks the orb+rings toward the center so
+    a maskable icon keeps everything inside the safe zone."""
+    W = size_px * SS
+    cx = cy = W // 2
+    s = content_scale
+
+    # full-bleed midnight-graphite background
+    img = vertical_gradient(W, W, pal["body"][0], pal["body"][1]).convert("RGBA")
+
+    # pulse rings
+    rings = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    rd = ImageDraw.Draw(rings)
+    for r_frac, a in [(0.30, 70), (0.375, 40)]:
+        r = int(W * r_frac * s)
+        rd.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(*pal["ring"], a), width=max(2, int(W * 0.010)))
+    img = Image.alpha_composite(img, rings.filter(ImageFilter.GaussianBlur(W * 0.004)))
+
+    # glow
+    orb_r = int(W * 0.205 * s)
+    glow = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse(
+        [cx - int(orb_r * 1.6), cy - int(orb_r * 1.6), cx + int(orb_r * 1.6), cy + int(orb_r * 1.6)],
+        fill=pal["glow"],
+    )
+    img = Image.alpha_composite(img, glow.filter(ImageFilter.GaussianBlur(W * 0.03)))
+
+    # champagne sphere (stacked fading circles) + specular highlight
+    orb = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    od = ImageDraw.Draw(orb)
+    steps = 60
+    for i in range(steps, 0, -1):
+        t = i / steps
+        rr = int(orb_r * t)
+        col = lerp(pal["orb"][0], pal["orb"][1], 1 - t)
+        od.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(*col, 255))
+    hx, hy, hr = cx - int(orb_r * 0.33), cy - int(orb_r * 0.36), int(orb_r * 0.42)
+    hl = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    ImageDraw.Draw(hl).ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(255, 255, 255, 150))
+    orb = Image.alpha_composite(orb, hl.filter(ImageFilter.GaussianBlur(W * 0.02)))
+    img = Image.alpha_composite(img, orb)
+
+    return img.resize((size_px, size_px), Image.LANCZOS)
+
+
+def build_web_icons() -> None:
+    """Emit the PWA / home-screen icons into apps/web via Next.js file conventions."""
+    web = Path(__file__).resolve().parents[1] / "apps" / "web"
+    targets = [
+        (web / "src/app/apple-icon.png", 180, 1.0),  # iOS home screen
+        (web / "src/app/icon.png", 512, 1.0),  # favicon / general
+        (web / "public/icons/otto-192.png", 192, 1.0),  # manifest (any)
+        (web / "public/icons/otto-512.png", 512, 1.0),  # manifest (any)
+        (web / "public/icons/otto-maskable-512.png", 512, 0.78),  # manifest (maskable safe-zone)
+    ]
+    for path, size, scale in targets:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        render_web(size, PALETTES["phone"], scale).save(path)
+        print(f"wrote {path} ({size}px)")
+
+
 def main() -> None:
     here = Path(__file__).resolve().parent
     default_outs = {
@@ -125,7 +187,13 @@ def main() -> None:
     ap.add_argument("--variant", choices=list(PALETTES), default="default")
     ap.add_argument("--out", type=Path, default=None, help="destination .icns (defaults per variant)")
     ap.add_argument("--preview", type=Path, default=None, help="also write a PNG preview here")
+    ap.add_argument("--web", action="store_true", help="emit PWA/home-screen icons into apps/web instead")
     args = ap.parse_args()
+
+    if args.web:
+        build_web_icons()
+        return
+
     out = args.out or default_outs[args.variant]
 
     master = render(BASE, PALETTES[args.variant])

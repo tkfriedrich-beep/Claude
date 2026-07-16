@@ -219,10 +219,13 @@ export function CommandBand() {
         {mode !== "deep" ? (
           <>
             {/* home-composer: preserved compatibility id for the relocated Briefing composer (F12);
-                the input itself keeps band-composer. */}
+                the input itself keeps band-composer. On phones it STACKS — a full-width input above a
+                wrapping row that shows every control (mode selector + Preview + Execute), so mobile
+                gets the same actions as the desktop band instead of collapsing to just Execute.
+                At md+ it is the original single inline row (unchanged). */}
             <div
               data-testid="home-composer"
-              className="flex min-w-[240px] flex-1 flex-wrap items-center gap-3 rounded-[14px] border border-line-control bg-raised py-2 pl-4 pr-2"
+              className="flex min-w-[240px] flex-1 flex-col items-stretch gap-2.5 rounded-[14px] border border-line-control bg-raised p-2.5 md:flex-row md:flex-wrap md:items-center md:gap-3 md:py-2 md:pl-4 md:pr-2"
             >
               <input
                 value={text}
@@ -233,33 +236,30 @@ export function CommandBand() {
                 placeholder="Direct the system, define an objective, or ask a question…"
                 aria-label="Command Otto"
                 data-testid="band-composer"
-                className="min-w-[160px] flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted/70"
+                className="min-h-[40px] w-full bg-transparent px-2 text-[15px] text-ink outline-none placeholder:text-muted/70 md:min-h-0 md:w-auto md:flex-1 md:px-0"
               />
-              <div className="flex flex-none flex-wrap items-center gap-2.5">
-                {/* Wrap for responsive visibility: SegmentedControl already sets `inline-flex`
-                    on itself, so putting `hidden` on it too is a base/base display conflict that
-                    source order (not class order) resolves — hide via a wrapper instead. */}
-                <div className="hidden md:block">
-                  <SegmentedControl
-                    options={AUTONOMY.map((a) => ({ value: a.value, label: a.label }))}
-                    value={autonomy}
-                    onChange={(v) => setAutonomy(v)}
-                    label="Execution mode"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-2.5 md:flex-none md:justify-start">
+                <SegmentedControl
+                  options={AUTONOMY.map((a) => ({ value: a.value, label: a.label }))}
+                  value={autonomy}
+                  onChange={(v) => setAutonomy(v)}
+                  label="Execution mode"
+                />
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => submit(true)}
+                    className="rounded-[9px] border border-line-button px-4 py-2 text-[13.5px] font-medium text-ink-soft hover:border-faint hover:text-ink"
+                  >
+                    Preview plan
+                  </button>
+                  <button
+                    onClick={() => submit(false)}
+                    data-testid="band-execute"
+                    className="rounded-[9px] bg-accent px-5 py-2 text-[13.5px] font-semibold text-on-accent hover:bg-accent-hover"
+                  >
+                    Execute
+                  </button>
                 </div>
-                <button
-                  onClick={() => submit(true)}
-                  className="hidden rounded-[9px] border border-line-button px-4 py-2 text-[13.5px] font-medium text-ink-soft hover:border-faint hover:text-ink sm:block"
-                >
-                  Preview plan
-                </button>
-                <button
-                  onClick={() => submit(false)}
-                  data-testid="band-execute"
-                  className="rounded-[9px] bg-accent px-5 py-2 text-[13.5px] font-semibold text-on-accent hover:bg-accent-hover"
-                >
-                  Execute
-                </button>
               </div>
             </div>
 
