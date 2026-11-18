@@ -1,30 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, Instrument_Sans, Newsreader } from "next/font/google";
+import "@fontsource-variable/instrument-sans/wght.css";
+import "@fontsource-variable/newsreader/standard.css";
+import "@fontsource-variable/newsreader/standard-italic.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./globals.css";
 import { Providers } from "@/app/providers";
 import { AppShell } from "@/components/cockpit/app-shell";
-
-// Three fonts, three registers (OttoOS spec §01): Instrument Sans for all UI,
-// Newsreader italic for Otto's voice only, IBM Plex Mono for technical truth.
-const instrument = Instrument_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-instrument",
-  display: "swap",
-});
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  style: ["normal", "italic"],
-  variable: "--font-newsreader",
-  display: "swap",
-});
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "OttoOS",
@@ -53,7 +35,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       suppressHydrationWarning
       data-theme="dark"
-      className={`${instrument.variable} ${newsreader.variable} ${plexMono.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
