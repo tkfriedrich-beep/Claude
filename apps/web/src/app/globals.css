@@ -5,6 +5,12 @@
    gold-shifted accent. Same custom-property names as before, plus the hairline/ink
    ladders and the champagne-gold accent family. Toggle via data-theme on <html>. */
 
+:root {
+  --font-instrument: "Instrument Sans Variable";
+  --font-newsreader: "Newsreader Variable";
+  --font-plex-mono: "IBM Plex Mono";
+}
+
 :root,
 [data-theme="dark"] {
   /* dark "midnight graphite" (default) */
